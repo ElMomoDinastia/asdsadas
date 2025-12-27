@@ -53,6 +53,14 @@ export class HBRoomAdapter implements IHBRoomAdapter {
           '--disable-features=WebRtcHideLocalIpsWithMdns',
           '--disable-gpu',
           '--disable-software-rasterizer',
+          // Additional flags for WebRTC in containers
+          '--use-fake-ui-for-media-stream',
+          '--use-fake-device-for-media-stream',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins',
+          '--disable-site-isolation-trials',
+          '--ignore-certificate-errors',
+          '--allow-running-insecure-content',
         ],
       });
 
