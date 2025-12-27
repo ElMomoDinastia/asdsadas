@@ -30,7 +30,6 @@ WORKDIR /app
 
 # Set environment variables for Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
 # Copy package files and install production deps only
 COPY package*.json ./

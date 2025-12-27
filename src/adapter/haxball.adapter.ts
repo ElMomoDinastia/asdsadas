@@ -44,12 +44,8 @@ export class HBRoomAdapter implements IHBRoomAdapter {
 
     try {
       // Launch headless browser
-      // In production (Docker), use the system Chrome; in dev, use bundled Chromium
-      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
-      
       this.browser = await puppeteer.launch({
         headless: true,
-        executablePath,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
