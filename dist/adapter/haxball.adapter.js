@@ -32,7 +32,6 @@ class HBRoomAdapter {
         }
         logger_1.roomLogger.info({ roomName: this.config.roomName }, 'Initializing HaxBall room with Puppeteer Extra (Stealth)...');
         try {
-            // Usamos puppeteer_extra_1 en lugar del puppeteer básico
             this.browser = await puppeteer_extra_1.default.launch({
                 headless: "new",
                 args: [
@@ -62,15 +61,18 @@ class HBRoomAdapter {
             await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'networkidle0', timeout: 30000 });
             await this.page.waitForFunction('typeof HBInit === "function"', { timeout: 30000 });
             logger_1.roomLogger.info('HBInit API is ready');
-             const roomConfig = {
+
+            // --- CONFIGURACIÓN MODIFICADA ---
+            const roomConfig = {
                 roomName: this.config.roomName,
                 maxPlayers: this.config.maxPlayers,
-                noPlayer: this.config.noPlayer,
+                noPlayer: false, // <--- CAMBIADO: Ahora el Host es visible
                 token: this.config.token || '',
                 public: this.config.public ?? true,
                 password: this.config.password || null,
-                geo: this.config.geo, // <--- AGREGA ESTA LÍNEA AQUÍ
+                geo: { "code": "ar", "lat": -34.6037, "lon": -58.3816 } // <--- CAMBIADO: Geo Argentina
             };
+
             logger_1.roomLogger.info({ config: { ...roomConfig, token: '[REDACTED]' } }, 'Creating HaxBall room...');
             const roomLink = await this.page.evaluate(async (config) => {
                 return new Promise((resolve, reject) => {
