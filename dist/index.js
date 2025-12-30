@@ -1,38 +1,48 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_1 = require("./config");
 const logger_1 = require("./utils/logger");
 const haxball_adapter_1 = require("./adapter/haxball.adapter");
 const controller_1 = require("./game/controller");
 const server_1 = require("./health/server");
+const mongoose_1 = __importDefault(require("mongoose")); // <--- Importación necesaria
 
 let gameController = null;
 let healthServer = null;
 
 async function main() {
-    // 1. Capturamos variables de entorno del Workflow
-    const roomId = process.env.ROOM_ID || "1";
-    const hbToken = process.env.HAXBALL_TOKEN || config_1.config.haxballToken;
+    logger_1.logger.info({ config: (0, config_1.getPublicConfig)() }, 'Starting HaxBall Impostor Game...');
 
-    logger_1.logger.info({ config: (0, config_1.getPublicConfig)() }, `Starting HaxBall Impostor Room #${roomId}...`);
+    // --- CONEXIÓN A MONGODB ---
+    const mongoURI = process.env.MONGO_URI;
+    if (mongoURI) {
+        try {
+            // Conexión directa
+            await mongoose_1.default.connect(mongoURI);
+            logger_1.logger.info('✅ Conectado a MongoDB Atlas con éxito');
+        } catch (error) {
+            logger_1.logger.error({ error }, '❌ Error al conectar a MongoDB');
+            // No matamos el proceso para que la sala abra igual, aunque no guarde
+        }
+    } else {
+        logger_1.logger.warn('⚠️ No se detectó MONGO_URI en los Secrets. Los datos no se guardarán.');
+    }
+    // --------------------------
 
-    if (!hbToken) {
-        logger_1.logger.warn('⚠️ No HAXBALL_TOKEN provided. Check GitHub Secrets.');
+    if (!config_1.config.hasToken) {
+        logger_1.logger.warn('⚠️ No HAXBALL_TOKEN provided. You will need to solve recaptcha manually.');
     }
 
-    // 2. Configuración de la sala con GEO fija (Argentina)
     const roomConfig = {
-        roomName: `${config_1.config.roomName} #${roomId}`, // Ej: "Mesa Impostor PRO #1"
+        roomName: config_1.config.roomName,
         maxPlayers: config_1.config.maxPlayers,
         noPlayer: config_1.config.noPlayer,
-        token: hbToken,
+        token: config_1.config.haxballToken,
         public: true,
-        // Forzamos la bandera de Argentina y ubicación
-        geo: {
-            code: "ar",
-            lat: -34.5,
-            lon: -58.4000015258789
-        }
+        geo: config_1.config.geo // Para asegurar la bandera
     };
 
     const adapter = (0, haxball_adapter_1.createHBRoomAdapter)(roomConfig);
@@ -59,31 +69,35 @@ async function main() {
 
     try {
         await gameController.start();
-        logger_1.logger.info(`🎮 HaxBall Impostor Room #${roomId} is running!`);
-        
-        const link = gameController.getRoomLink();
-        if (link) {
-            logger_1.logger.info(`🔗 Room link: ${link}`);
+        logger_1.logger.info('🎮 HaxBall Impostor Game is running!');
+        if (gameController.getRoomLink()) {
+            logger_1.logger.info(`🔗 Room link: ${gameController.getRoomLink()}`);
         }
     }
     catch (error) {
         console.error('Game controller error:', error);
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger_1.logger.error({ error: errorMessage }, 'Failed to start game controller');
         shutdown(1);
     }
 }
 
 function shutdown(code = 0) {
     logger_1.logger.info('Shutting down...');
+    
     if (gameController) {
         gameController.stop();
         gameController = null;
     }
+    
     if (healthServer) {
         healthServer.stop();
         healthServer = null;
     }
+
+    // Cerrar conexión de Mongo para evitar colgados
+    if (mongoose_1.default.connection) {
+        mongoose_1.default.connection.close();
+    }
+
     process.exit(code);
 }
 
