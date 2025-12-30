@@ -1,0 +1,42 @@
+name: Deploy HaxBall Bots
+
+on:
+  push:
+    branches: [ main ] # Se activa al subir cambios a la rama main
+  workflow_dispatch: # Permite activarlo manualmente desde la pestaña Actions
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: |
+          npm install
+          npm install puppeteer-extra puppeteer-extra-plugin-stealth
+
+      - name: Instalar dependencias de Chrome (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgbm-dev wget gnupg
+          # Esto asegura que Puppeteer tenga todo lo necesario para correr en Ubuntu
+          npx puppeteer install
+
+      - name: Ejecutar Servidor de HaxBall
+        env:
+          # Aquí puedes poner tus variables de entorno si las usas
+          # NODE_ENV: production
+          HAXBALL_TOKEN: ${{ secrets.HAXBALL_TOKEN }} 
+        run: |
+          # Usamos 'nohup' o un proceso de fondo si quieres que se mantenga
+          # O simplemente ejecutamos el index si el Action es para testeo/deploy
+          node dist/index.js
