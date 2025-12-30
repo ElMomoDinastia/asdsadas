@@ -5,9 +5,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HBRoomAdapter = void 0;
 exports.createHBRoomAdapter = createHBRoomAdapter;
-const puppeteer_1 = __importDefault(require("puppeteer"));
+
+// Configuración de Puppeteer Extra con Stealth
+const puppeteer_extra_1 = __importDefault(require("puppeteer-extra"));
+const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-plugin-stealth"));
+puppeteer_extra_1.default.use((0, puppeteer_extra_plugin_stealth_1.default)());
+
 const logger_1 = require("../utils/logger");
 const HAXBALL_HEADLESS_URL = 'https://www.haxball.com/headless';
+
 class HBRoomAdapter {
     browser = null;
     page = null;
@@ -24,10 +30,11 @@ class HBRoomAdapter {
             logger_1.roomLogger.warn('Room adapter already initialized');
             return;
         }
-        logger_1.roomLogger.info({ roomName: this.config.roomName }, 'Initializing HaxBall room with Puppeteer...');
+        logger_1.roomLogger.info({ roomName: this.config.roomName }, 'Initializing HaxBall room with Puppeteer Extra (Stealth)...');
         try {
-            this.browser = await puppeteer_1.default.launch({
-                headless: true,
+            // Usamos puppeteer_extra_1 en lugar del puppeteer básico
+            this.browser = await puppeteer_extra_1.default.launch({
+                headless: "new",
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -51,7 +58,6 @@ class HBRoomAdapter {
                     logger_1.roomLogger.debug({ browserLog: text }, 'Browser console');
                 }
             });
-            // esto
             logger_1.roomLogger.info('Navigating to HaxBall headless page...');
             await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'networkidle0', timeout: 30000 });
             await this.page.waitForFunction('typeof HBInit === "function"', { timeout: 30000 });
@@ -64,37 +70,26 @@ class HBRoomAdapter {
                 public: this.config.public ?? true,
                 password: this.config.password || null,
             };
-            // Initialize the room
             logger_1.roomLogger.info({ config: { ...roomConfig, token: '[REDACTED]' } }, 'Creating HaxBall room...');
             const roomLink = await this.page.evaluate(async (config) => {
                 return new Promise((resolve, reject) => {
                     try {
-                        // @ts-expect-error HBInit is global in HaxBall headless page
                         const room = HBInit(config);
-                        // Store room globally for later access
-                        // @ts-expect-error Setting global for communication
                         window.__haxRoom = room;
-                        // @ts-expect-error Setting global for events
                         window.__haxEvents = [];
-                        // Set up event collection
                         room.onPlayerJoin = (player) => {
-                            // @ts-expect-error Global access
                             window.__haxEvents.push({ type: 'playerJoin', player });
                         };
                         room.onPlayerLeave = (player) => {
-                            // @ts-expect-error Global access
                             window.__haxEvents.push({ type: 'playerLeave', player });
                         };
                         room.onPlayerChat = (player, message) => {
-                            // @ts-expect-error Global access
                             window.__haxEvents.push({ type: 'playerChat', player, message });
-                            // Return false to block all messages - we'll echo allowed ones via sendAnnouncement
                             return false;
                         };
                         room.onRoomLink = (link) => {
                             resolve(link);
                         };
-                        // Fallback timeout
                         setTimeout(() => {
                             reject(new Error('Timeout waiting for room link'));
                         }, 60000);
@@ -107,18 +102,14 @@ class HBRoomAdapter {
             this.roomLink = roomLink;
             this.initialized = true;
             logger_1.roomLogger.info({ link: roomLink }, '🎮 HaxBall room created successfully!');
-            // Load the custom Impostor stadium immediately
             await this.loadDefaultStadium();
-            // Start event polling
             this.startEventPolling();
-            // Notify handler
             if (this.handlers.onRoomLink) {
                 this.handlers.onRoomLink(roomLink);
             }
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            // eslint-disable-next-line no-console
             console.error('HaxBall room initialization error:', error);
             logger_1.roomLogger.error({ error: errorMessage }, 'Failed to initialize HaxBall room');
             await this.close();
@@ -129,7 +120,6 @@ class HBRoomAdapter {
         if (!this.page)
             return;
         try {
-            // Load the Impostor stadium JSON
             const stadiumJson = JSON.stringify({
                 "name": "Mesa Impostor PRO 5P",
                 "width": 400,
@@ -168,7 +158,6 @@ class HBRoomAdapter {
                 "traits": {}
             });
             await this.page.evaluate((stadium) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.setCustomStadium(stadium);
             }, stadiumJson);
             logger_1.roomLogger.info('Custom Impostor stadium loaded');
@@ -178,15 +167,12 @@ class HBRoomAdapter {
         }
     }
     startEventPolling() {
-        // Poll for events from the browser every 100ms
         this.pollingInterval = setInterval(async () => {
             if (!this.page || !this.initialized)
                 return;
             try {
                 const events = await this.page.evaluate(() => {
-                    // @ts-expect-error Global access
                     const evts = window.__haxEvents || [];
-                    // @ts-expect-error Global access
                     window.__haxEvents = [];
                     return evts;
                 });
@@ -195,7 +181,6 @@ class HBRoomAdapter {
                 }
             }
             catch (error) {
-                // Page might be closed
                 logger_1.roomLogger.debug('Event polling error (page may be closed)');
             }
         }, 100);
@@ -222,169 +207,113 @@ class HBRoomAdapter {
                 break;
         }
     }
-    isInitialized() {
-        return this.initialized;
-    }
-    getRoomLink() {
-        return this.roomLink;
-    }
+    isInitialized() { return this.initialized; }
+    getRoomLink() { return this.roomLink; }
     async getPlayerList() {
-        if (!this.page || !this.initialized)
-            return [];
+        if (!this.page || !this.initialized) return [];
         try {
             return await this.page.evaluate(() => {
-                // @ts-expect-error Global access  
                 return window.__haxRoom?.getPlayerList() || [];
             });
-        }
-        catch {
-            return [];
-        }
+        } catch { return []; }
     }
     async getPlayer(id) {
-        if (!this.page || !this.initialized)
-            return null;
+        if (!this.page || !this.initialized) return null;
         try {
             return await this.page.evaluate((playerId) => {
-                // @ts-expect-error Global access
                 return window.__haxRoom?.getPlayer(playerId) || null;
             }, id);
-        }
-        catch {
-            return null;
-        }
+        } catch { return null; }
     }
     async setPlayerAdmin(playerId, admin) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((id, isAdmin) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.setPlayerAdmin(id, isAdmin);
             }, playerId, admin);
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ playerId, error }, 'Failed to set player admin');
         }
     }
     async setPlayerTeam(playerId, team) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((id, t) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.setPlayerTeam(id, t);
             }, playerId, team);
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ playerId, error }, 'Failed to set player team');
         }
     }
     async kickPlayer(playerId, reason, ban = false) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((id, r, b) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.kickPlayer(id, r, b);
             }, playerId, reason, ban);
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ playerId, error }, 'Failed to kick player');
         }
     }
     async sendChat(message, targetId) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((msg, tid) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.sendChat(msg, tid);
             }, message, targetId);
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ error }, 'Failed to send chat');
         }
     }
     async sendAnnouncement(message, targetId, options) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((msg, tid, opts) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.sendAnnouncement(msg, tid, opts?.color, opts?.style, opts?.sound);
             }, message, targetId, options);
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ error }, 'Failed to send announcement');
         }
     }
-    setEventHandlers(handlers) {
-        this.handlers = handlers;
-    }
+    setEventHandlers(handlers) { this.handlers = handlers; }
     async setCustomStadium(stadium) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((stadiumJson) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.setCustomStadium(stadiumJson);
             }, stadium);
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ error }, 'Failed to set custom stadium');
         }
     }
     async setPlayerDiscProperties(playerId, props) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((id, properties) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.setPlayerDiscProperties(id, properties);
             }, playerId, props);
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ playerId, error }, 'Failed to set player disc properties');
         }
     }
     async startGame() {
-        if (!this.page || !this.initialized)
-            return;
-        try {
-            await this.page.evaluate(() => {
-                // @ts-expect-error Global access
-                window.__haxRoom?.startGame();
-            });
-        }
-        catch (error) {
-            logger_1.roomLogger.error({ error }, 'Failed to start game');
-        }
+        if (!this.page || !this.initialized) return;
+        try { await this.page.evaluate(() => { window.__haxRoom?.startGame(); });
+        } catch (error) { logger_1.roomLogger.error({ error }, 'Failed to start game'); }
     }
     async stopGame() {
-        if (!this.page || !this.initialized)
-            return;
-        try {
-            await this.page.evaluate(() => {
-                // @ts-expect-error Global access
-                window.__haxRoom?.stopGame();
-            });
-        }
-        catch (error) {
-            logger_1.roomLogger.error({ error }, 'Failed to stop game');
-        }
+        if (!this.page || !this.initialized) return;
+        try { await this.page.evaluate(() => { window.__haxRoom?.stopGame(); });
+        } catch (error) { logger_1.roomLogger.error({ error }, 'Failed to stop game'); }
     }
     async setTeamsLock(locked) {
-        if (!this.page || !this.initialized)
-            return;
+        if (!this.page || !this.initialized) return;
         try {
             await this.page.evaluate((isLocked) => {
-                // @ts-expect-error Global access
                 window.__haxRoom?.setTeamsLock(isLocked);
             }, locked);
             logger_1.roomLogger.info({ locked }, 'Teams lock set');
-        }
-        catch (error) {
+        } catch (error) {
             logger_1.roomLogger.error({ error }, 'Failed to set teams lock');
         }
     }
@@ -394,21 +323,11 @@ class HBRoomAdapter {
             this.pollingInterval = null;
         }
         if (this.page) {
-            try {
-                await this.page.close();
-            }
-            catch {
-                // Ignore close errors
-            }
+            try { await this.page.close(); } catch {}
             this.page = null;
         }
         if (this.browser) {
-            try {
-                await this.browser.close();
-            }
-            catch {
-                // Ignore close errors
-            }
+            try { await this.browser.close(); } catch {}
             this.browser = null;
         }
         this.roomLink = null;
@@ -417,10 +336,6 @@ class HBRoomAdapter {
     }
 }
 exports.HBRoomAdapter = HBRoomAdapter;
-/**
- * Factory function to create real HaxBall adapter
- */
 function createHBRoomAdapter(config) {
     return new HBRoomAdapter(config);
 }
-//# sourceMappingURL=haxball.adapter.js.map
