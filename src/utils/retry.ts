@@ -18,9 +18,7 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
   shouldRetry: () => true,
 };
 
-/**
- * Execute a function with exponential backoff retry
- */
+
 export async function withRetry<T>(
   fn: RetryableFunction<T>,
   options: RetryOptions = {}
@@ -72,9 +70,7 @@ export function timeout<T>(promise: Promise<T>, ms: number, errorMessage?: strin
   return Promise.race([promise, timeoutPromise]);
 }
 
-/**
- * Debounce function calls
- */
+
 export function debounce<T extends (...args: unknown[]) => unknown>(
   fn: T,
   delayMs: number

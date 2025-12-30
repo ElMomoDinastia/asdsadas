@@ -54,7 +54,6 @@ describe('Game Flow Integration', () => {
 
   describe('Full Game Round', () => {
     it('should run a complete game round', async () => {
-      // Add 5 players and join queue
       const players = [];
       for (let i = 1; i <= 5; i++) {
         const player = adapter.simulatePlayerJoin(`Player${i}`, i === 1);
@@ -65,17 +64,13 @@ describe('Game Flow Integration', () => {
       expect(controller.getQueueCount()).toBe(5);
       adapter.clearMessages();
 
-      // Admin starts the game
       adapter.simulatePlayerChat(players[0].id, '!start');
 
-      // Should be in ASSIGN phase
       expect(controller.getCurrentPhase()).toBe('ASSIGN');
 
-      // Check private messages were sent
       const privateMessages = adapter.getRecordedMessages().filter((m) => m.targetId !== null && m.targetId !== undefined);
       expect(privateMessages.length).toBeGreaterThan(0);
 
-      // Should have one impostor message
       const impostorMessages = privateMessages.filter((m) => m.message.includes('IMPOSTOR'));
       expect(impostorMessages).toHaveLength(1);
     });

@@ -3,7 +3,6 @@ import { config } from '../config';
 
 const transport = pino.transport({
   targets: [
-    // Console output with pretty printing
     {
       target: 'pino-pretty',
       level: config.logLevel,
@@ -13,7 +12,6 @@ const transport = pino.transport({
         ignore: 'pid,hostname',
       },
     },
-    // File output for production
     ...(config.isProduction
       ? [
           {
@@ -39,7 +37,6 @@ export const logger = pino(
   transport
 );
 
-// Child loggers for different modules
 export const gameLogger = logger.child({ module: 'game' });
 export const roomLogger = logger.child({ module: 'room' });
 export const commandLogger = logger.child({ module: 'command' });

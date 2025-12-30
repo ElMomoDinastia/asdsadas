@@ -58,7 +58,7 @@ export function containsSpoiler(message: string, secretName: string): boolean {
 }
 
 /**
- * Normalize string for comparison (lowercase, remove accents)
+ * Normalize string for comparison (lowercase, tsremove accen)
  */
 export function normalizeString(str: string): string {
   return str

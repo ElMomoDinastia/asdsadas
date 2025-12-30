@@ -38,20 +38,22 @@ function getEnvBoolean(key: string, defaultValue: boolean): boolean {
 }
 
 function loadConfig(): Config {
-  const haxballToken = process.env.HAXBALL_TOKEN || undefined;
+  const roomIdRaw = process.env.ROOM_ID || '1';
+  const roomIdFormated = roomIdRaw.padStart(2, '0');
+  
+  const haxballToken = process.env[`TOKEN_${roomIdRaw}`] || process.env.HAXBALL_TOKEN;
 
   return {
-    // HaxBall
     haxballToken: haxballToken && haxballToken.trim() !== '' ? haxballToken : undefined,
-    roomName: process.env.ROOM_NAME || '🔴 EL IMPOSTOR 🔴',
+    
+    roomName: `🔴  「 𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍 」  #${roomIdFormated}`,
+    
     maxPlayers: getEnvNumber('MAX_PLAYERS', 16),
     noPlayer: getEnvBoolean('NO_PLAYER', true),
 
-    // Server
     port: getEnvNumber('PORT', 3000),
     logLevel: process.env.LOG_LEVEL || 'info',
 
-    // Game Timing
     clueTime: getEnvNumber('CLUE_TIME', 30),
     discussionTime: getEnvNumber('DISCUSSION_TIME', 30),
     votingTime: getEnvNumber('VOTING_TIME', 45),

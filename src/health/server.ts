@@ -1,6 +1,4 @@
-/**
- * Health Check and Metrics Server
- */
+
 
 import express, { Request, Response, Application } from 'express';
 import { config } from '../config';
@@ -43,7 +41,6 @@ export class HealthServer {
   }
 
   private setupRoutes(): void {
-    // Health check endpoint
     this.app.get('/health', (_req: Request, res: Response) => {
       try {
         const health = this.getHealth();
@@ -59,12 +56,10 @@ export class HealthServer {
       }
     });
 
-    // Liveness probe (simple)
     this.app.get('/live', (_req: Request, res: Response) => {
       res.status(200).send('OK');
     });
 
-    // Readiness probe
     this.app.get('/ready', (_req: Request, res: Response) => {
       const health = this.getHealth();
       if (health.roomInitialized) {
@@ -74,7 +69,6 @@ export class HealthServer {
       }
     });
 
-    // Room link endpoint
     this.app.get('/room', (_req: Request, res: Response) => {
       const health = this.getHealth();
       if (health.roomLink) {
@@ -84,7 +78,6 @@ export class HealthServer {
       }
     });
 
-    // Prometheus-style metrics
     this.app.get('/metrics', (_req: Request, res: Response) => {
       try {
         const metrics = this.getMetrics();

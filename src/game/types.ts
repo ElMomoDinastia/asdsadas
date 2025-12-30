@@ -33,12 +33,12 @@ export interface Round {
   id: string;
   footballer: string;
   impostorId: number;
-  normalPlayerIds: number[];
-  clues: Map<number, string>; // playerId -> clue
-  votes: Map<number, number>; // voterId -> votedForId
-  clueOrder: number[]; // Order in which players give clues
+  normalPlayerIds: number[]; // Cambiado: quitamos readonly si lo tenía para poder filtrar
+  clues: Map<number, string>;
+  votes: Map<number, number>;
+  clueOrder: number[];       // Esta será nuestra lista maestra de "jugadores vivos"
   currentClueIndex: number;
-  phaseDeadline: number | null; // Unix timestamp for current phase timeout
+  phaseDeadline: number | null;
   startedAt: number;
   endedAt?: number;
   result?: RoundResult;
@@ -86,9 +86,9 @@ export interface GameSettings {
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
   minPlayers: 5,
   maxPlayersPerRound: 5,
-  clueTimeSeconds: 30,
-  discussionTimeSeconds: 60,
-  votingTimeSeconds: 45,
+  clueTimeSeconds: 20,         // Bajamos de 30 a 20 (es solo una palabra)
+  discussionTimeSeconds: 30,   // Bajamos de 60 a 30 (habrá varios debates)
+  votingTimeSeconds: 30,       // Bajamos de 45 a 30
 };
 
 /**

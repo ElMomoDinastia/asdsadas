@@ -1,13 +1,10 @@
-/**
- * HaxBall Impostor Game - Main Entry Point
- */
-
 import { config, getPublicConfig } from './config';
 import { logger } from './utils/logger';
 import { createHBRoomAdapter } from './adapter/haxball.adapter';
 import { GameController } from './game/controller';
 import { HealthServer } from './health/server';
 import { RoomConfig } from './adapter/types';
+import mongoose from 'mongoose'; // <--- AGREGADO: Importación de Mongoose
 
 let gameController: GameController | null = null;
 let healthServer: HealthServer | null = null;
@@ -15,7 +12,25 @@ let healthServer: HealthServer | null = null;
 async function main(): Promise<void> {
   logger.info({ config: getPublicConfig() }, 'Starting HaxBall Impostor Game...');
 
-  // Validate environment
+  // --- NUEVO: CONEXIÓN A MONGODB ---
+  const mongoURI = process.env.MONGO_URI;
+  if (!mongoURI) {
+    logger.error('❌ Error: La variable MONGO_URI no está definida.');
+    process.exit(1);
+  }
+
+  try {
+    // Conexión con timeout para evitar que GitHub Actions se quede colgado si la DB falla
+    await mongoose.connect(mongoURI, {
+      serverSelectionTimeoutMS: 5000,
+    });
+    logger.info('✅ Conectado a MongoDB Atlas con éxito');
+  } catch (error) {
+    logger.error({ error }, '❌ Error crítico: No se pudo conectar a MongoDB');
+    process.exit(1);
+  }
+  // ---------------------------------
+
   if (!config.hasToken) {
     logger.warn(
       '⚠️ No HAXBALL_TOKEN provided. You will need to solve recaptcha manually in the browser.'
@@ -24,7 +39,6 @@ async function main(): Promise<void> {
     logger.warn('Set the token in your .env file as HAXBALL_TOKEN');
   }
 
-  // Create room configuration
   const roomConfig: RoomConfig = {
     roomName: config.roomName,
     maxPlayers: config.maxPlayers,
@@ -33,13 +47,10 @@ async function main(): Promise<void> {
     public: true,
   };
 
-  // Create room adapter
   const adapter = createHBRoomAdapter(roomConfig);
 
-  // Create game controller
   gameController = new GameController(adapter);
 
-  // Create health server
   healthServer = new HealthServer(
     () => ({
       status: gameController?.isRoomInitialized() ? 'ok' : 'degraded',
@@ -60,20 +71,16 @@ async function main(): Promise<void> {
     })
   );
 
-  // Start health server
   healthServer.start();
 
-  // Start game controller
   try {
     await gameController.start();
     logger.info('🎮 HaxBall Impostor Game is running!');
     logger.info(`📊 Health check available at http://localhost:${config.port}/health`);
-
     if (gameController.getRoomLink()) {
       logger.info(`🔗 Room link: ${gameController.getRoomLink()}`);
     }
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Game controller error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
@@ -95,10 +102,12 @@ function shutdown(code: number = 0): void {
     healthServer = null;
   }
 
+  // Cerrar conexión a MongoDB al apagar
+  mongoose.connection.close();
+
   process.exit(code);
 }
 
-// Handle graceful shutdown
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 process.on('uncaughtException', (error) => {
@@ -110,7 +119,6 @@ process.on('unhandledRejection', (reason) => {
   shutdown(1);
 });
 
-// Start application
 main().catch((error) => {
   logger.error({ error }, 'Fatal error during startup');
   shutdown(1);

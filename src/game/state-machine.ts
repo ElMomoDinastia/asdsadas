@@ -321,11 +321,12 @@ function handleSubmitVote(state: GameState, playerId: number, votedId: number): 
   if (state.phase !== GamePhase.VOTING || !state.currentRound) return { state, sideEffects: [] };
 
   const round = state.currentRound;
-  const ids = [round.impostorId, ...round.normalPlayerIds];
+  // CAMBIO: Usar clueOrder que es nuestra lista de supervivientes
+  const aliveIds = round.clueOrder;
 
-  if (!ids.includes(playerId)) return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '❌ No estás en la ronda' }] };
-  if (!ids.includes(votedId)) return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '❌ Número inválido' }] };
-  if (playerId === votedId) return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '❌ No puedes votarte' }] };
+  if (!aliveIds.includes(playerId)) return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '❌ Estás fuera de la ronda' }] };
+  if (!aliveIds.includes(votedId)) return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '❌ Ese jugador ya no está' }] };
+  if (playerId === votedId) return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '❌ No puedes votarte a ti mismo' }] };
 
   const newVotes = new Map(round.votes);
   newVotes.set(playerId, votedId);
@@ -333,10 +334,11 @@ function handleSubmitVote(state: GameState, playerId: number, votedId: number): 
   const newRound: Round = { ...round, votes: newVotes };
 
   const sideEffects: SideEffect[] = [
-    { type: 'ANNOUNCE_PUBLIC', message: `🗳️ ${voter?.name ?? '?'} votó (${newVotes.size}/${ids.length})` },
+    { type: 'ANNOUNCE_PUBLIC', message: `🗳️ ${voter?.name ?? '?'} votó (${newVotes.size}/${aliveIds.length})` },
   ];
 
-  if (newVotes.size >= ids.length) {
+  // CAMBIO: Comparar contra la longitud de los vivos
+  if (newVotes.size >= aliveIds.length) {
     return handleEndVoting({ ...state, currentRound: newRound });
   }
 
@@ -350,6 +352,8 @@ function handleEndVoting(state: GameState): TransitionResult {
 
   const round = state.currentRound;
   const voteCount = new Map<number, number>();
+  
+  // Contamos votos
   for (const votedId of round.votes.values()) {
     voteCount.set(votedId, (voteCount.get(votedId) || 0) + 1);
   }
@@ -369,29 +373,102 @@ function handleEndVoting(state: GameState): TransitionResult {
     }
   }
 
-  if (tied.length > 1) votedOutId = tied[Math.floor(Math.random() * tied.length)];
+  // MANEJO DE EMPATE O NO VOTOS
+  if (tied.length > 1) {
+    votedOutId = tied[Math.floor(Math.random() * tied.length)];
+  } else if (voteCount.size === 0) {
+    // Si nadie votó, elegimos a alguien al azar de los vivos para que el juego no se trabe
+    votedOutId = round.clueOrder[Math.floor(Math.random() * round.clueOrder.length)];
+  }
 
   const wasCorrect = votedOutId === round.impostorId;
-  const impostor = state.players.get(round.impostorId);
   const votedOut = votedOutId ? state.players.get(votedOutId) : null;
+  const sideEffects: SideEffect[] = [{ type: 'CLEAR_TIMER' }];
 
-  const result: RoundResult = {
-    impostorWon: !wasCorrect,
-    impostorId: round.impostorId,
-    impostorName: impostor?.name ?? '?',
-    footballer: round.footballer,
-    votedOutId,
-    votedOutName: votedOut?.name ?? null,
-    wasCorrectVote: wasCorrect,
-  };
+  if (wasCorrect) {
+    // 1. SI VOTAN AL IMPOSTOR: Ganan los jugadores
+    const result: RoundResult = {
+      impostorWon: false,
+      impostorId: round.impostorId,
+      impostorName: state.players.get(round.impostorId)?.name ?? '?',
+      footballer: round.footballer,
+      votedOutId,
+      votedOutName: votedOut?.name ?? null,
+      wasCorrectVote: true,
+    };
 
-  return {
-    state: { ...state, phase: GamePhase.REVEAL, currentRound: { ...round, endedAt: Date.now(), result } },
-    sideEffects: [
-      { type: 'CLEAR_TIMER' },
-      { type: 'ANNOUNCE_PUBLIC', message: `📊 Más votado: ${votedOut?.name ?? 'nadie'}`, style: { color: 0xffffff, style: 'bold', sound: 2 } },
-    ],
-  };
+    sideEffects.push({ 
+      type: 'ANNOUNCE_PUBLIC', 
+      message: `🎯 ¡LO ENCONTRARON! ${votedOut?.name} era el impostor.`, 
+      style: { color: 0x00ff00, style: 'bold', sound: 2 } 
+    });
+    
+    return {
+      state: { ...state, phase: GamePhase.REVEAL, currentRound: { ...round, endedAt: Date.now(), result } },
+      sideEffects
+    };
+
+  } else {
+    // 2. SI VOTAN A UN INOCENTE
+    const remainingInnocents = round.normalPlayerIds.filter(id => id !== votedOutId);
+    
+    // Si quedan 1 inocente y el impostor, gana el Impostor automáticamente
+    if (remainingInnocents.length <= 1) {
+      const result: RoundResult = {
+        impostorWon: true,
+        impostorId: round.impostorId,
+        impostorName: state.players.get(round.impostorId)?.name ?? '?',
+        footballer: round.footballer,
+        votedOutId,
+        votedOutName: votedOut?.name ?? null,
+        wasCorrectVote: false,
+      };
+
+      sideEffects.push({ 
+        type: 'ANNOUNCE_PUBLIC', 
+        message: `💀 ${votedOut?.name} era INOCENTE. ¡El Impostor gana por mayoría!`, 
+        style: { color: 0xff0000, style: 'bold', sound: 2 } 
+      });
+
+      return {
+        state: { ...state, phase: GamePhase.REVEAL, currentRound: { ...round, endedAt: Date.now(), result } },
+        sideEffects
+      };
+    } else {
+      // EL JUEGO SIGUE: Volvemos a CLUES
+      sideEffects.push({ 
+        type: 'ANNOUNCE_PUBLIC', 
+        message: `❌ ${votedOut?.name} era INOCENTE. El impostor sigue libre...`, 
+        style: { color: 0xffaa00, style: 'bold' } 
+      });
+
+      const newClueOrder = round.clueOrder.filter(id => id !== votedOutId);
+      const newRound: Round = {
+        ...round,
+        normalPlayerIds: remainingInnocents,
+        clueOrder: newClueOrder,
+        currentClueIndex: 0,
+        clues: new Map(), // IMPORTANTE: Limpiar pistas para la nueva sub-ronda
+        votes: new Map()  // IMPORTANTE: Limpiar votos
+      };
+
+      const firstId = newClueOrder[0];
+      const first = state.players.get(firstId);
+
+      sideEffects.push({ 
+        type: 'ANNOUNCE_PUBLIC', 
+        message: `📝 NUEVA RONDA DE PISTAS (${remainingInnocents.length} inocentes restantes) | Turno: ${first?.name ?? '?'}`, 
+        style: { color: 0x00bfff, style: 'bold', sound: 1 } 
+      });
+      
+      sideEffects.push({ type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds });
+
+      return {
+        state: { ...state, phase: GamePhase.CLUES, currentRound: newRound },
+        sideEffects
+      };
+    }
+  }
 }
 
 function handleEndReveal(state: GameState): TransitionResult {
@@ -486,13 +563,17 @@ function handleResetRound(state: GameState): TransitionResult {
 export function canPlayerAct(state: GameState, playerId: number, action: 'clue' | 'vote'): boolean {
   if (!state.currentRound) return false;
   const round = state.currentRound;
-  const ids = [round.impostorId, ...round.normalPlayerIds];
-  if (!ids.includes(playerId)) return false;
+  
+  // CAMBIO: Si no está en clueOrder, es un fantasma
+  if (!round.clueOrder.includes(playerId)) return false;
 
   switch (action) {
-    case 'clue': return state.phase === GamePhase.CLUES && round.clueOrder[round.currentClueIndex] === playerId;
-    case 'vote': return state.phase === GamePhase.VOTING && !round.votes.has(playerId);
-    default: return false;
+    case 'clue': 
+      return state.phase === GamePhase.CLUES && round.clueOrder[round.currentClueIndex] === playerId;
+    case 'vote': 
+      return state.phase === GamePhase.VOTING && !round.votes.has(playerId);
+    default: 
+      return false;
   }
 }
 

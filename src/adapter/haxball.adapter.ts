@@ -1,9 +1,3 @@
-/**
- * Real HaxBall Room Adapter using Puppeteer + Native HBInit API
- * 
- * This adapter launches a headless Chrome browser, navigates to the
- * HaxBall headless page, and interacts with the native HBInit API.
- */
 
 import puppeteer, { Browser, Page } from 'puppeteer';
 import {
@@ -18,9 +12,6 @@ import { roomLogger } from '../utils/logger';
 
 const HAXBALL_HEADLESS_URL = 'https://www.haxball.com/headless';
 
-/**
- * Real implementation of IHBRoomAdapter using Puppeteer
- */
 export class HBRoomAdapter implements IHBRoomAdapter {
   private browser: Browser | null = null;
   private page: Page | null = null;
@@ -43,7 +34,6 @@ export class HBRoomAdapter implements IHBRoomAdapter {
     roomLogger.info({ roomName: this.config.roomName }, 'Initializing HaxBall room with Puppeteer...');
 
     try {
-      // Launch headless browser
       this.browser = await puppeteer.launch({
         headless: true,
         args: [
@@ -53,7 +43,6 @@ export class HBRoomAdapter implements IHBRoomAdapter {
           '--disable-features=WebRtcHideLocalIpsWithMdns',
           '--disable-gpu',
           '--disable-software-rasterizer',
-          // Additional flags for WebRTC in containers
           '--use-fake-ui-for-media-stream',
           '--use-fake-device-for-media-stream',
           '--disable-web-security',
@@ -66,23 +55,19 @@ export class HBRoomAdapter implements IHBRoomAdapter {
 
       this.page = await this.browser.newPage();
 
-      // Set up console message forwarding
       this.page.on('console', (msg) => {
         const text = msg.text();
         if (text.includes('[HaxBall]')) {
           roomLogger.debug({ browserLog: text }, 'Browser console');
         }
       });
-
-      // Navigate to HaxBall headless page
+  // esto
       roomLogger.info('Navigating to HaxBall headless page...');
       await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'networkidle0', timeout: 30000 });
 
-      // Wait for HBInit to be available
       await this.page.waitForFunction('typeof HBInit === "function"', { timeout: 30000 });
       roomLogger.info('HBInit API is ready');
 
-      // Create room configuration for HBInit
       const roomConfig = {
         roomName: this.config.roomName,
         maxPlayers: this.config.maxPlayers,

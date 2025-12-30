@@ -32,16 +32,12 @@ export enum CommandType {
   REGULAR_MESSAGE = 'REGULAR_MESSAGE',
 }
 
-// Words that mean "join"
-const JOIN_WORDS = ['jugar', 'entrar', 'listo', 'yo', 'join', 'play', '!jugar', '!join', '!entrar'];
+const JOIN_WORDS = ['jugar', 'entrar', 'listo', 'yo', 'join', 'play', '!jugar', '!join', '!entrar', 'meteme'];
 
-// Words that mean "leave"
 const LEAVE_WORDS = ['salir', 'leave', 'exit', '!salir', '!leave'];
 
-// Words that mean "help"
 const HELP_WORDS = ['ayuda', 'help', '?', '!ayuda', '!help'];
 
-// Words that mean "status"
 const STATUS_WORDS = ['estado', 'status', '!estado', '!status'];
 
 /**
@@ -326,7 +322,7 @@ export function generateStatusText(state: GameState): string {
     [GamePhase.WAITING]: '⏳ Esperando',
     [GamePhase.ASSIGN]: '🎭 Asignando',
     [GamePhase.CLUES]: '📝 Pistas',
-    [GamePhase.DISCUSSION]: '🗣️ Debate',
+    [GamePhase.DISCUSSION]: '🗣️ bateDe',
     [GamePhase.VOTING]: '🗳️ Votación',
     [GamePhase.REVEAL]: '🔔 Revelación',
     [GamePhase.RESULTS]: '🏆 Resultados',
