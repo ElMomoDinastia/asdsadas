@@ -3,7 +3,6 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameController = void 0;
 
@@ -15,32 +14,17 @@ const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
 const footballers_json_1 = __importDefault(require("../data/footballers.json"));
 
-// --- CONFIGURACIÓN DE BASE DE DATOS ---
-const playerLogSchema = new mongoose_1.default.Schema({
+// --- MODELO SIMPLE DE JUGADOR ---
+const playerSchema = new mongoose_1.default.Schema({
     name: String,
     auth: String,
     conn: String,
-    room: String,
-    timestamp: { type: Date, default: Date.now }
+    date: { type: Date, default: Date.now }
 });
-
-const roundLogSchema = new mongoose_1.default.Schema({
-    impostorName: String,
-    footballer: String,
-    impostorWon: Boolean,
-    votedOutName: String,
-    timestamp: { type: Date, default: Date.now }
-});
-
-const PlayerLog = mongoose_1.default.models.PlayerLog || mongoose_1.default.model('PlayerLog', playerLogSchema, 'playerlogs');
-const RoundLog = mongoose_1.default.models.RoundLog || mongoose_1.default.model('RoundLog', roundLogSchema, 'roundlogs');
+const PlayerDB = mongoose_1.default.models.Player || mongoose_1.default.model('Player', playerSchema);
 
 const SEAT_POSITIONS = [
-    { x: 0, y: -130 },
-    { x: 124, y: -40 },
-    { x: 76, y: 105 },
-    { x: -76, y: 105 },
-    { x: -124, y: -40 },
+    { x: 0, y: -130 }, { x: 124, y: -40 }, { x: 76, y: 105 }, { x: -76, y: 105 }, { x: -124, y: -40 },
 ];
 
 class GameController {
@@ -49,7 +33,6 @@ class GameController {
     footballers;
     phaseTimer = null;
     assignDelayTimer = null;
-    roundLogs = [];
 
     constructor(adapter, footballers) {
         this.adapter = adapter;
@@ -59,12 +42,12 @@ class GameController {
             votingTimeSeconds: config_1.config.votingTime,
         });
         this.footballers = footballers ?? footballers_json_1.default;
-        
-        // Conexión silenciosa a MongoDB
+
+        // Conexión a la DB
         if (config_1.config.mongoUri) {
             mongoose_1.default.connect(config_1.config.mongoUri)
-                .then(() => logger_1.gameLogger.info("✅ MongoDB Atlas conectado"))
-                .catch(err => logger_1.gameLogger.error("❌ Error DB:", err));
+                .then(() => logger_1.gameLogger.info("✅ DB Conectada"))
+                .catch(err => logger_1.gameLogger.error("❌ DB Error", err));
         }
 
         this.setupEventHandlers();
@@ -75,25 +58,24 @@ class GameController {
             onPlayerJoin: this.handlePlayerJoin.bind(this),
             onPlayerLeave: this.handlePlayerLeave.bind(this),
             onPlayerChat: this.handlePlayerChat.bind(this),
-            onRoomLink: (link) => logger_1.gameLogger.info({ link }, 'Room is ready')
+            onRoomLink: (link) => logger_1.gameLogger.info({ link }, 'Room ready'),
         });
     }
 
     handlePlayerJoin(player) {
-        // Guardar ingreso en DB sin esperar (Fire and Forget)
+        // --- GUARDADO SIMPLE EN DB AL ENTRAR ---
         if (mongoose_1.default.connection.readyState === 1) {
-            PlayerLog.create({
+            PlayerDB.create({
                 name: player.name,
                 auth: player.auth,
-                conn: player.conn,
-                room: config_1.config.roomName
-            }).catch(() => {});
+                conn: player.conn
+            }).catch(() => {}); // Fire and forget silencioso
         }
 
-        // Lógica de nombres duplicados
+        // Lógica de duplicados
         for (const existing of this.state.players.values()) {
             if (existing.name.toLowerCase() === player.name.toLowerCase()) {
-                this.adapter.sendAnnouncement(`❌ El nombre "${player.name}" ya está en uso`, player.id, { color: 0xff0000 });
+                this.adapter.sendAnnouncement(`❌ Nombre en uso`, player.id, { color: 0xff0000 });
                 this.adapter.kickPlayer(player.id, 'Nombre duplicado');
                 return;
             }
@@ -108,52 +90,41 @@ class GameController {
     }
 
     handlePlayerChat(player, message) {
-        const msg = message.trim().toLowerCase();
-        
-        // Clave admin rápida
-        if (msg === "alfajor") {
-            this.adapter.setPlayerAdmin(player.id, true);
-            this.adapter.sendAnnouncement("👑 Acceso Maestro Confirmado", player.id, { color: 0xFFD700 });
-            return false;
-        }
-
         const command = (0, handler_1.parseCommand)(message);
         const isAdmin = player.admin;
 
-        // 1. GESTIÓN DE FANTASMAS
+        // Gestión de fantasmas y chat
         const activePhases = [types_1.GamePhase.CLUES, types_1.GamePhase.DISCUSSION, types_1.GamePhase.VOTING, types_1.GamePhase.REVEAL];
         if (activePhases.includes(this.state.phase) && this.state.currentRound) {
             if (!this.isPlayerInRound(player.id) && !isAdmin) {
                 if (command?.type === handler_1.CommandType.JOIN) {
                     if (!this.state.queue.includes(player.id)) {
                         this.state.queue = [...this.state.queue, player.id];
-                        this.adapter.sendAnnouncement(`✅ ${player.name} en cola`, null, { color: 0x00ff00 });
+                        this.adapter.sendAnnouncement(`✅ ${player.name} anotado`, null, { color: 0x00ff00 });
                     }
-                    return false;
                 }
-                return false; // Silencio para los que no juegan
+                return false;
             }
         }
 
-        // 2. CONTROL DE PISTAS Y SPOILERS
+        // Pistas y Spoilers
         if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
             const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
             if (player.id !== currentGiverId && !isAdmin) return false;
 
             const clueWord = message.trim().split(/\s+/)[0];
-            const secretFootballer = this.state.currentRound?.footballer;
-            
-            if (secretFootballer && this.containsSpoiler(clueWord, secretFootballer)) {
-                this.adapter.sendAnnouncement('❌ ¡No puedes decir el nombre!', player.id, { color: 0xff6b6b });
+            if (clueWord) {
+                if (this.containsSpoiler(clueWord, this.state.currentRound.footballer)) {
+                    this.adapter.sendAnnouncement('❌ No spoilers', player.id, { color: 0xff6b6b });
+                    return false;
+                }
+                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: clueWord }));
                 return false;
             }
-
-            this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: clueWord }));
-            return false;
         }
 
-        // 3. COMANDOS Y CHAT GENERAL
-        if (!command) {
+        // Chat regular y comandos
+        if (!command || command.type === handler_1.CommandType.REGULAR_MESSAGE) {
             this.adapter.sendAnnouncement(`${player.name}: ${message}`, null, { color: 0xffffff });
             return false;
         }
@@ -163,128 +134,81 @@ class GameController {
             if (validation.action.type === 'START_GAME') validation.action.footballers = this.footballers;
             this.applyTransition((0, state_machine_1.transition)(this.state, validation.action));
         }
-
         return false;
     }
 
     applyTransition(result) {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
-
+        
         if (this.state.phase === types_1.GamePhase.ASSIGN) {
             this.setupGameField();
             this.assignDelayTimer = setTimeout(() => {
                 this.applyTransition((0, state_machine_1.transitionToClues)(this.state));
             }, 3000);
         }
-
         if (this.state.phase === types_1.GamePhase.REVEAL) {
             setTimeout(() => this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'END_REVEAL' })), 3000);
         }
-
         if (this.state.phase === types_1.GamePhase.RESULTS) {
             setTimeout(() => this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'RESET_GAME' })), 8000);
         }
     }
 
-    executeSideEffects(effects) {
-        effects.forEach(e => {
-            switch (e.type) {
-                case 'ANNOUNCE_PUBLIC':
-                    this.adapter.sendAnnouncement(e.message, null, e.style);
-                    break;
-                case 'ANNOUNCE_PRIVATE':
-                    setTimeout(() => {
-                        this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xffff00, style: 'bold' });
-                    }, 150);
-                    break;
-                case 'SET_PHASE_TIMER':
-                    this.setPhaseTimer(e.durationSeconds);
-                    break;
-                case 'CLEAR_TIMER':
-                    this.clearPhaseTimer();
-                    break;
-                case 'LOG_ROUND':
-                    this.logRoundToDB(e.result);
-                    break;
-                case 'AUTO_START_GAME':
-                    setTimeout(() => {
-                        this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'START_GAME', footballers: this.footballers }));
-                    }, 2000);
-                    break;
-            }
-        });
-    }
-
-    async logRoundToDB(result) {
-        this.roundLogs.push(result);
-        if (mongoose_1.default.connection.readyState === 1) {
-            RoundLog.create({
-                impostorName: result.impostorName,
-                footballer: result.footballer,
-                impostorWon: result.impostorWon,
-                votedOutName: result.votedOutName
-            }).catch(() => {});
-        }
-    }
-
     async setupGameField() {
         if (!this.state.currentRound) return;
-        const roundPlayerIds = [...this.state.currentRound.normalPlayerIds, this.state.currentRound.impostorId];
-        
+        const roundIds = [...this.state.currentRound.normalPlayerIds, this.state.currentRound.impostorId];
         try {
             await this.adapter.stopGame();
-            await new Promise(r => setTimeout(r, 100));
-            
-            const allPlayers = await this.adapter.getPlayerList();
-            for (const p of allPlayers) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
-            
-            await new Promise(r => setTimeout(r, 100));
-            for (const id of roundPlayerIds) {
+            const players = await this.adapter.getPlayerList();
+            for (const p of players) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+            for (const id of roundIds) {
                 await this.adapter.setPlayerTeam(id, 1);
                 await new Promise(r => setTimeout(r, 50));
             }
-
-            await new Promise(r => setTimeout(r, 200));
             await this.adapter.startGame();
             await new Promise(r => setTimeout(r, 500));
-
-            roundPlayerIds.forEach((id, i) => {
-                if (SEAT_POSITIONS[i]) {
-                    this.adapter.setPlayerDiscProperties(id, {
-                        x: SEAT_POSITIONS[i].x, y: SEAT_POSITIONS[i].y, xspeed: 0, yspeed: 0
-                    });
-                }
+            roundIds.forEach((id, i) => {
+                this.adapter.setPlayerDiscProperties(id, { x: SEAT_POSITIONS[i].x, y: SEAT_POSITIONS[i].y, xspeed: 0, yspeed: 0 });
             });
-        } catch (e) { logger_1.gameLogger.error("Setup error:", e); }
+        } catch (e) {}
     }
 
-    containsSpoiler(clue, footballer) {
-        const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const c = norm(clue);
-        const f = norm(footballer);
-        return f.split(/\s+/).some(part => part.length > 2 && c.includes(part));
+    executeSideEffects(effects) {
+        for (const e of effects) {
+            switch (e.type) {
+                case 'ANNOUNCE_PUBLIC': this.adapter.sendAnnouncement(e.message, null, e.style); break;
+                case 'ANNOUNCE_PRIVATE': this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xffff00 }); break;
+                case 'SET_PHASE_TIMER': this.setPhaseTimer(e.durationSeconds); break;
+                case 'CLEAR_TIMER': this.clearPhaseTimer(); break;
+                case 'AUTO_START_GAME': 
+                    setTimeout(() => this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'START_GAME', footballers: this.footballers })), 2000);
+                    break;
+            }
+        }
     }
 
-    setPhaseTimer(s) {
+    containsSpoiler(clue, foot) {
+        const n = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const c = n(clue);
+        return n(foot).split(/\s+/).some(p => p.length > 2 && c.includes(p));
+    }
+
+    setPhaseTimer(sec) {
         this.clearPhaseTimer();
         this.phaseTimer = setTimeout(() => {
-            const p = this.state.phase;
-            let type = p === types_1.GamePhase.CLUES ? 'CLUE_TIMEOUT' : p === types_1.GamePhase.DISCUSSION ? 'END_DISCUSSION' : p === types_1.GamePhase.VOTING ? 'END_VOTING' : null;
-            if (type) this.applyTransition((0, state_machine_1.transition)(this.state, { type }));
-        }, s * 1000);
+            let t = this.state.phase === types_1.GamePhase.CLUES ? 'CLUE_TIMEOUT' : this.state.phase === types_1.GamePhase.DISCUSSION ? 'END_DISCUSSION' : this.state.phase === types_1.GamePhase.VOTING ? 'END_VOTING' : null;
+            if (t) this.applyTransition((0, state_machine_1.transition)(this.state, { type: t }));
+        }, sec * 1000);
     }
 
     clearPhaseTimer() {
-        if (this.phaseTimer) { clearTimeout(this.phaseTimer); this.phaseTimer = null; }
-        if (this.assignDelayTimer) { clearTimeout(this.assignDelayTimer); this.assignDelayTimer = null; }
+        if (this.phaseTimer) clearTimeout(this.phaseTimer);
+        if (this.assignDelayTimer) clearTimeout(this.assignDelayTimer);
+        this.phaseTimer = this.assignDelayTimer = null;
     }
 
     isPlayerInRound(id) { return this.state.currentRound?.clueOrder.includes(id) ?? false; }
-    isRoomInitialized() { return this.adapter.isInitialized(); }
-    getCurrentPhase() { return this.state.phase; }
-    getPlayerCount() { return this.state.players.size; }
-    getRoomLink() { return this.adapter.getRoomLink(); }
     async start() { await this.adapter.initialize(); }
     stop() { this.clearPhaseTimer(); this.adapter.close(); }
 }
