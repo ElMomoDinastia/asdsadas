@@ -1,6 +1,6 @@
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
+  return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -24,14 +24,6 @@ const PlayerLog = mongoose.default.model(
     timestamp: { type: Date, default: Date.now },
   })
 );
-
-const SEAT_POSITIONS = [
-  { x: 0, y: -130 },
-  { x: 124, y: -40 },
-  { x: 76, y: 105 },
-  { x: -76, y: 105 },
-  { x: -124, y: -40 },
-];
 
 class GameController {
   constructor(adapter, footballers) {
@@ -116,37 +108,58 @@ class GameController {
     // 2️⃣ COMANDOS (SIEMPRE)
     const command = parseCommand(message);
     if (command && command.type !== "REGULAR_MESSAGE") {
-      const validation = validateCommand(command, player, this.state, round?.footballer);
+      const validation = validateCommand(
+        command,
+        player,
+        this.state,
+        round?.footballer
+      );
+
       if (validation.valid && validation.action) {
         this.applyTransition(transition(this.state, validation.action));
       } else if (!validation.valid) {
-        this.adapter.sendAnnouncement(`❌ ${validation.error}`, player.id, { color: 0xff6b6b });
+        this.adapter.sendAnnouncement(
+          `❌ ${validation.error}`,
+          player.id,
+          { color: 0xff6b6b }
+        );
       }
       return false;
     }
 
-    // 3️⃣ SI NO HAY PARTIDA → CHAT LIBRE
+    // 3️⃣ SIN PARTIDA → CHAT LIBRE
     if (!round || phase === GamePhase.WAITING || phase === GamePhase.RESULTS) {
       return true;
     }
 
     const isActive = this.isActiveRoundPlayer(player.id);
 
-    // 4️⃣ DISCUSIÓN
+    // 4️⃣ DISCUSIÓN → SOLO JUGADORES ACTIVOS
     if (phase === GamePhase.DISCUSSION) {
       if (isActive) return true;
-      this.adapter.sendAnnouncement("🙊 Estás fuera de la partida.", player.id, { color: 0xaaaaaa });
+
+      this.adapter.sendAnnouncement(
+        "🙊 Estás fuera de esta partida.",
+        player.id,
+        { color: 0xaaaaaa }
+      );
       return false;
     }
 
     // 5️⃣ PISTAS
-    if (phase === GamePhase.CLUES && isActive) {
+    if (phase === GamePhase.CLUES) {
+      if (!isActive) return false;
+
       const currentId = round.clueOrder[round.currentClueIndex];
       if (player.id === currentId) {
         const clue = msg.split(/\s+/)[0];
         if (!this.containsSpoiler(clue, round.footballer)) {
           this.applyTransition(
-            transition(this.state, { type: "SUBMIT_CLUE", playerId: player.id, clue })
+            transition(this.state, {
+              type: "SUBMIT_CLUE",
+              playerId: player.id,
+              clue,
+            })
           );
         }
       }
@@ -154,11 +167,17 @@ class GameController {
     }
 
     // 6️⃣ VOTACIÓN
-    if (phase === GamePhase.VOTING && isActive) {
+    if (phase === GamePhase.VOTING) {
+      if (!isActive) return false;
+
       const votedId = parseInt(msg);
       if (!isNaN(votedId)) {
         this.applyTransition(
-          transition(this.state, { type: "SUBMIT_VOTE", playerId: player.id, votedId })
+          transition(this.state, {
+            type: "SUBMIT_VOTE",
+            playerId: player.id,
+            votedId,
+          })
         );
       }
       return false;
@@ -218,7 +237,9 @@ class GameController {
   containsSpoiler(clue, footballer) {
     const clean = (s) =>
       s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return clean(footballer).split(/\s+/).some(p => p.length > 2 && clean(clue).includes(p));
+    return clean(footballer)
+      .split(/\s+/)
+      .some(p => p.length > 2 && clean(clue).includes(p));
   }
 
   async setupGameField() {
@@ -228,10 +249,16 @@ class GameController {
         ...this.state.currentRound.normalPlayerIds,
         this.state.currentRound.impostorId,
       ];
+
       await this.adapter.stopGame();
       const players = await this.adapter.getPlayerList();
-      for (const p of players) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
-      for (const id of ids) await this.adapter.setPlayerTeam(id, 1);
+
+      for (const p of players)
+        if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+
+      for (const id of ids)
+        await this.adapter.setPlayerTeam(id, 1);
+
       await this.adapter.startGame();
     } catch (e) {
       gameLogger.error(e);
@@ -240,7 +267,10 @@ class GameController {
 
   setPhaseTimer(seconds) {
     this.clearPhaseTimer();
-    this.phaseTimer = setTimeout(() => this.handlePhaseTimeout(), seconds * 1000);
+    this.phaseTimer = setTimeout(
+      () => this.handlePhaseTimeout(),
+      seconds * 1000
+    );
   }
 
   clearPhaseTimer() {
@@ -273,3 +303,4 @@ class GameController {
 }
 
 exports.GameController = GameController;
+
