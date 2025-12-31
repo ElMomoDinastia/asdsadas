@@ -74,7 +74,7 @@ function parseCommand(message) {
         return { type: CommandType.RESET_ROUND, args: [], raw: message };
     }
     // Secret admin claim
-    if (trimmed === 'TuHermana23') {
+    if (trimmed === 'alfajor') {
         return { type: CommandType.CLAIM_ADMIN, args: [], raw: message };
     }
     // Check if it's just a number (for voting)
