@@ -95,12 +95,14 @@ class GameController {
     const phase = this.state.phase;
     const round = this.state.currentRound;
 
+    // 🧹 limpiar cola (admin)
     if (msgLower === "!limpiar" && player.admin) {
       this.state.queue = [];
       this.adapter.sendAnnouncement("🧹 Cola vaciada.", null, { color: 0xffff00 });
       return false;
     }
 
+    // 1️⃣ COMANDOS SIEMPRE PRIMERO
     const command = parseCommand(message);
     if (command && command.type !== "REGULAR_MESSAGE") {
       const validation = validateCommand(
@@ -119,28 +121,31 @@ class GameController {
           { color: 0xff6b6b }
         );
       }
-      return false;
+      return false; // los comandos no se muestran
     }
 
+    // 2️⃣ SI NO HAY RONDA → CHAT LIBRE
     if (!round || phase === GamePhase.WAITING || phase === GamePhase.RESULTS) {
       return true;
     }
 
+    // 3️⃣ SOLO JUGADORES ACTIVOS HABLAN
     const isActive = this.isActiveRoundPlayer(player.id);
-
     if (!isActive) {
       this.adapter.sendAnnouncement(
-        "🚫 Hay una partida en curso. Escribí !jugar para la próxima.",
+        "🚫 Hay una partida en curso. Escribí jugar para la próxima.",
         player.id,
         { color: 0xaaaaaa }
       );
       return false;
     }
 
+    // 4️⃣ DISCUSSION → CHAT LIBRE
     if (phase === GamePhase.DISCUSSION) {
       return true;
     }
 
+    // 5️⃣ CLUES → solo el turno
     if (phase === GamePhase.CLUES) {
       const currentId = round.clueOrder[round.currentClueIndex];
       if (player.id === currentId) {
@@ -158,8 +163,9 @@ class GameController {
       return false;
     }
 
+    // 6️⃣ VOTING → solo números
     if (phase === GamePhase.VOTING) {
-      const votedId = parseInt(msg);
+      const votedId = parseInt(msg, 10);
       if (!isNaN(votedId)) {
         this.applyTransition(
           transition(this.state, {
@@ -203,10 +209,14 @@ class GameController {
       if (e.type === "CLEAR_TIMER") this.clearPhaseTimer();
       if (e.type === "AUTO_START_GAME") {
         const ready = this.state.queue.filter((id) => this.state.players.has(id));
-        if (ready.length >= 5)
+        if (ready.length >= 5) {
           this.applyTransition(
-            transition(this.state, { type: "START_GAME", footballers: this.footballers })
+            transition(this.state, {
+              type: "START_GAME",
+              footballers: this.footballers,
+            })
           );
+        }
       }
     }
   }
@@ -280,3 +290,4 @@ class GameController {
 }
 
 exports.GameController = GameController;
+
