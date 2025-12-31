@@ -70,7 +70,7 @@ class HBRoomAdapter {
                 token: this.config.token || '',
                 public: this.config.public ?? true,
                 password: this.config.password || null,
-                geo: { "code": "ar", "lat": -34.6037, "lon": -58.3816 } // <--- CAMBIADO: Geo Argentina
+                geo: { "code": "ar", "lat": -34.5630760192871, "lon": -58.4608917236328 } // <--- CAMBIADO: Geo Argentina
             };
 
             logger_1.roomLogger.info({ config: { ...roomConfig, token: '[REDACTED]' } }, 'Creating HaxBall room...');
