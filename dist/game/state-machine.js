@@ -50,40 +50,65 @@ function transition(state, action) {
             // Limpiamos la cola de los que ya entraron
             return { state: { ...state, phase: types_1.GamePhase.ASSIGN, currentRound: round, queue: state.queue.slice(5) }, sideEffects: effects };
 
-        case 'SUBMIT_CLUE':
+      case 'SUBMIT_CLUE': {
             const rClue = state.currentRound;
             if (!rClue) return { state, sideEffects: [] };
+            
             const newClues = new Map(rClue.clues).set(action.playerId, action.clue);
             const isLastClue = rClue.currentClueIndex >= rClue.clueOrder.length - 1;
             
             if (isLastClue) {
+                const effects = [
+                    { type: 'ANNOUNCE_PUBLIC', message: `💬 Última pista: "${action.clue}"` },
+                    { type: 'ANNOUNCE_PUBLIC', message: "📜 --- RESUMEN DE PISTAS ---", style: { color: 0xFFFF00 } }
+                ];
+
+                rClue.clueOrder.forEach((id) => {
+                    const name = state.players.get(id)?.name || "Desconectado";
+                    const clueText = id === action.playerId ? action.clue : (newClues.get(id) || "Sin pista");
+                    effects.push({ type: 'ANNOUNCE_PUBLIC', message: `📍 ${name}: ${clueText}`, style: { color: 0xFFFFFF } });
+                });
+
+                effects.push({ type: 'ANNOUNCE_PUBLIC', message: `🗣️ DEBATE (${state.settings.discussionTimeSeconds}s)`, style: { color: 0x00FFCC, fontWeight: "bold" } });
+                effects.push({ type: 'SET_PHASE_TIMER', durationSeconds: state.settings.discussionTimeSeconds });
+
                 return { 
                     state: { ...state, phase: types_1.GamePhase.DISCUSSION, currentRound: { ...rClue, clues: newClues } }, 
-                    sideEffects: [
-                        { type: 'ANNOUNCE_PUBLIC', message: `💬 Pista: "${action.clue}"` },
-                        { type: 'ANNOUNCE_PUBLIC', message: `🗣️ DEBATE (${state.settings.discussionTimeSeconds}s)` },
-                        { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.discussionTimeSeconds }
-                    ]
+                    sideEffects: effects
                 };
             }
+
+            const nextPlayerId = rClue.clueOrder[rClue.currentClueIndex + 1];
+            const nextPlayer = state.players.get(nextPlayerId);
+            const nextName = nextPlayer ? nextPlayer.name : "Jugador Ausente (Saltando...)";
+
             return { 
                 state: { ...state, currentRound: { ...rClue, clues: newClues, currentClueIndex: rClue.currentClueIndex + 1 } }, 
                 sideEffects: [
                     { type: 'ANNOUNCE_PUBLIC', message: `💬 Pista: "${action.clue}"` },
-                    { type: 'ANNOUNCE_PUBLIC', message: `📝 Turno de: ${state.players.get(rClue.clueOrder[rClue.currentClueIndex + 1])?.name || "???"}` }
+                    { type: 'ANNOUNCE_PUBLIC', message: `📝 Turno de: ${nextName}` },
+                    { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
                 ]
             };
+        }
 
-        case 'END_DISCUSSION':
+        case 'END_DISCUSSION': {
             if (!state.currentRound) return { state, sideEffects: [] };
-            const list = state.currentRound.clueOrder.map((id, i) => `${i + 1}. ${state.players.get(id)?.name || "Desconectado"}`).join(' | ');
+            
+            // Creamos una lista numerada bien legible para que no haya dudas al votar
+            const list = state.currentRound.clueOrder
+                .map((id, i) => `${i + 1}. ${state.players.get(id)?.name || "Desconectado"}`)
+                .join('  |  ');
+
             return { 
                 state: { ...state, phase: types_1.GamePhase.VOTING }, 
                 sideEffects: [
-                    { type: 'ANNOUNCE_PUBLIC', message: `🗳️ VOTEN (Escriban el número): ${list}` },
+                    { type: 'ANNOUNCE_PUBLIC', message: `🗳️ ¡A VOTAR! Escriban el NÚMERO del sospechoso:`, style: { color: 0xFF0000, fontWeight: "bold" } },
+                    { type: 'ANNOUNCE_PUBLIC', message: list, style: { color: 0xFFFFFF } },
                     { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.votingTimeSeconds }
                 ] 
             };
+        }
 
         case 'SUBMIT_VOTE':
             const rVote = state.currentRound;
