@@ -388,3 +388,8 @@ function getPhaseDescription(phase) {
     };
     return names[phase] ?? 'Desconocido';
 }
+exports.transition = transition;
+exports.transitionToClues = transitionToClues;
+exports.canPlayerAct = canPlayerAct;
+exports.getCurrentActor = getCurrentActor;
+exports.getPhaseDescription = getPhaseDescription;
