@@ -80,15 +80,16 @@ class GameController {
         const phase = this.state.phase;
         const round = this.state.currentRound;
 
-        // 1. COMANDOS DE ADMIN (Siempre funcionan)
+        // 1. COMANDOS DE ADMIN
         if (msgLower === "!limpiar" && player.admin) {
             this.state.queue = [];
             this.adapter.sendAnnouncement("🧹 Cola vaciada por Admin.", null, { color: 0xFFFF00 });
             return false;
         }
 
-        // 2. PROCESAR COMANDOS DE JUEGO (jugar, salir, etc.)
+        // 2. DETECTAR SI ES UN COMANDO (Empieza con ! o son palabras clave como "jugar")
         const command = (0, handler_1.parseCommand)(message);
+        
         if (command.type !== "REGULAR_MESSAGE") {
             const validation = (0, handler_1.validateCommand)(command, player, this.state, round?.footballer);
             if (validation.valid && validation.action) {
@@ -96,49 +97,49 @@ class GameController {
             } else if (!validation.valid) {
                 this.adapter.sendAnnouncement(`❌ ${validation.error}`, player.id, { color: 0xff6b6b });
             }
-            return false; // Los comandos nunca se muestran en el chat
+            return false; // Los comandos nunca se muestran
         }
 
-        // 3. LÓGICA DE CHAT SEGÚN LA FASE
-        
-        // Si no hay partida iniciada o estamos en resultados, CHAT LIBRE
+        // 3. SI NO ES COMANDO, ES UN MENSAJE NORMAL. REVISAMOS FASE:
+
+        // FASES DE CHAT LIBRE (Esperando o Resultados)
         if (phase === "WAITING" || phase === "RESULTS") {
-            return true;
+            return true; 
         }
 
         const isPlaying = round && (round.impostorId === player.id || round.normalPlayerIds.includes(player.id));
 
-        // Fase de Pistas: Solo el que da la pista puede escribir
+        // FASE DE DEBATE: Solo jugadores vivos
+        if (phase === "DISCUSSION") {
+            if (isPlaying) return true; // Permite que el mensaje se vea en el juego
+            
+            this.adapter.sendAnnouncement("🙊 Solo los jugadores activos debaten.", player.id, { color: 0xAAAAAA });
+            return false;
+        }
+
+        // FASE DE PISTAS: Solo el que da la pista
         if (phase === "CLUES" && round) {
             const currentGiverId = round.clueOrder[round.currentClueIndex];
             if (player.id === currentGiverId) {
                 const clueWord = msg.split(/\s+/)[0];
                 if (clueWord && !this.containsSpoiler(clueWord, round.footballer)) {
                     this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: clueWord }));
+                    return false; // La pista se procesa y se oculta para que el bot la anuncie formalmente
                 } else {
-                    this.adapter.sendAnnouncement("❌ No puedes spoilear el nombre.", player.id, { color: 0xFF0000 });
+                    this.adapter.sendAnnouncement("❌ No puedes decir el nombre del futbolista.", player.id, { color: 0xFF0000 });
+                    return false;
                 }
             }
-            return false; // Silencio para todos los demás
+            return false; // Silencio para el resto
         }
 
-        // Fase de Debate: SOLO JUGADORES ACTIVOS
-        if (phase === "DISCUSSION") {
-            if (isPlaying) {
-                return true; // ESTO PERMITE QUE EL MENSAJE SE VEA
-            } else {
-                this.adapter.sendAnnouncement("🙊 Solo los jugadores activos debaten.", player.id, { color: 0xAAAAAA });
-                return false;
-            }
-        }
-
-        // Fase de Votación: Solo procesar números
+        // FASE DE VOTACIÓN: Solo números
         if (phase === "VOTING") {
             const votedId = parseInt(msg);
             if (!isNaN(votedId) && isPlaying) {
                 this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_VOTE', playerId: player.id, votedId: votedId }));
             }
-            return false; // No mostrar votos o chat ajeno en la lista
+            return false;
         }
 
         return false;
