@@ -12,7 +12,6 @@ const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
 const footballers_json_1 = __importDefault(require("../data/footballers.json"));
 
-// Posiciones en el mapa para que queden en círculo o fila
 const SEAT_POSITIONS = [
     { x: 0, y: -130 }, { x: 124, y: -40 }, { x: 76, y: 105 }, { x: -76, y: 105 }, { x: -124, y: -40 },
 ];
@@ -36,7 +35,17 @@ class GameController {
             onPlayerJoin: this.handlePlayerJoin.bind(this),
             onPlayerLeave: this.handlePlayerLeave.bind(this),
             onPlayerChat: this.handlePlayerChat.bind(this),
-            onRoomLink: (link) => logger_1.gameLogger.info({ link }, 'Room ready'),
+            onRoomLink: (link) => {
+                logger_1.gameLogger.info({ link }, 'Room ready');
+                
+                // --- ANUNCIO DE AUTORÍA FACHERO ---
+                setTimeout(() => {
+                    this.adapter.sendAnnouncement(" ", null); 
+                    this.adapter.sendAnnouncement("┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓", null, { color: 0x00FFCC });
+                    this.adapter.sendAnnouncement("   SALA CREADA POR: 🆃🅴🅻🅴🅴🆂🅴   ", null, { color: 0x00FFCC, fontWeight: "bold" });
+                    this.adapter.sendAnnouncement("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛", null, { color: 0x00FFCC });
+                }, 2000);
+            },
         });
     }
 
@@ -102,12 +111,26 @@ class GameController {
             }
         }
 
-        // Silenciar chat durante fases críticas para no-jugadores
+        // Silenciar chat durante fases críticas
         const isMutedPhase = [types_1.GamePhase.CLUES, types_1.GamePhase.VOTING].includes(this.state.phase);
         if (isMutedPhase && !isPlaying && !player.admin) return false;
 
-        // Formato de chat facherito
-        this.adapter.sendAnnouncement(`${player.name}: ${msg}`, null, { color: 0xFFFFFF });
+        // --- FORMATO DE CHAT PERSONALIZADO ---
+        let chatPrefix = "";
+        let chatColor = 0xFFFFFF; 
+
+        if (player.admin) {
+            chatPrefix = "⭐ ";
+            chatColor = 0x00FFFF;
+        } else if (isPlaying) {
+            chatPrefix = "👤 ";
+            chatColor = 0xADFF2F;
+        } else {
+            chatPrefix = "👀 "; 
+            chatColor = 0xCCCCCC;
+        }
+
+        this.adapter.sendAnnouncement(`${chatPrefix}${player.name}: ${msg}`, null, { color: chatColor });
         return false; 
     }
 
@@ -115,7 +138,6 @@ class GameController {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
 
-        // Limpiar la cancha de los que fueron expulsados (llevarlos a Spec)
         if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
             const aliveIds = this.state.currentRound.clueOrder;
             this.adapter.getPlayerList().then(players => {
@@ -127,7 +149,6 @@ class GameController {
             });
         }
 
-        // Delay visual para que los jugadores lean quién es el futbolista
         if (this.state.phase === types_1.GamePhase.ASSIGN && !this.assignDelayTimer) {
             this.setupGameField();
             this.assignDelayTimer = setTimeout(() => {
@@ -152,13 +173,10 @@ class GameController {
         try {
             await this.adapter.stopGame();
             const all = await this.adapter.getPlayerList();
-            // Resetear todos a espectadores
             for (const p of all) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
-            // Poner a los 5 participantes en el equipo rojo
             for (const id of ids) await this.adapter.setPlayerTeam(id, 1);
             await this.adapter.startGame();
             
-            // Posicionar a los jugadores en sus "asientos"
             setTimeout(() => {
                 ids.forEach((id, i) => {
                     this.adapter.setPlayerDiscProperties(id, { x: SEAT_POSITIONS[i].x, y: SEAT_POSITIONS[i].y, xspeed: 0, yspeed: 0 });
@@ -192,7 +210,6 @@ class GameController {
         if (!foot) return false;
         const n = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const c = n(clue);
-        // Evita que usen partes del nombre como pista (ej: Messi -> "Mess")
         return n(foot).split(/\s+/).some(p => p.length > 2 && c.includes(p));
     }
 
@@ -200,23 +217,14 @@ class GameController {
         this.clearPhaseTimer();
         this.phaseTimer = setTimeout(() => {
             let type = null;
-            
             if (this.state.phase === types_1.GamePhase.CLUES) {
                 this.adapter.sendAnnouncement("⏰ TIEMPO AGOTADO. Pasando de turno...", null, { color: 0xFFA500, fontWeight: "bold" });
-                
                 const currentGiverId = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
-                
-                this.applyTransition((0, state_machine_1.transition)(this.state, { 
-                    type: 'SUBMIT_CLUE', 
-                    playerId: currentGiverId, 
-                    clue: "--- NO DIO PISTA ---" 
-                }));
+                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: currentGiverId, clue: "--- NO DIO PISTA ---" }));
                 return;
             }
-            
             else if (this.state.phase === types_1.GamePhase.DISCUSSION) type = 'END_DISCUSSION';
             else if (this.state.phase === types_1.GamePhase.VOTING) type = 'END_VOTING';
-            
             if (type) this.applyTransition((0, state_machine_1.transition)(this.state, { type }));
         }, sec * 1000);
     }
