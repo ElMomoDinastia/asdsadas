@@ -95,19 +95,60 @@ function transition(state, action) {
 function handleEndVoting(state) {
     const round = state.currentRound;
     const counts = {};
+    
+    // 1. Contar votos
     round.votes.forEach(v => counts[v] = (counts[v] || 0) + 1);
     const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
     const votedOutId = sorted[0];
 
     const isImpostor = votedOutId === round.impostorId;
-    const name = state.players.get(votedOutId)?.name;
-    const result = { impostorWon: !isImpostor, impostorName: state.players.get(round.impostorId)?.name, footballer: round.footballer };
+    const votedName = state.players.get(votedOutId)?.name;
+
+    // 2. Si atrapan al Impostor: Ganan Inocentes
+    if (isImpostor) {
+        const result = { impostorWon: false, impostorName: votedName, footballer: round.footballer };
+        return { 
+            state: { ...state, phase: types_1.GamePhase.REVEAL, currentRound: { ...round, result } }, 
+            sideEffects: [
+                { type: 'CLEAR_TIMER' },
+                { type: 'ANNOUNCE_PUBLIC', message: `🎯 ¡LO CAZARON! ${votedName} era el Impostor.` }
+            ] 
+        };
+    } 
+
+    // 3. Si expulsan a un Inocente: ¿Cuántos quedan?
+    const remainingInnocents = round.normalPlayerIds.filter(id => id !== votedOutId);
+    
+    // REGLA DE VICTORIA DEL IMPOSTOR:
+    // Si queda 1 Inocente vs 1 Impostor, ya no hay mayoría posible para votar. Gana el Impostor.
+    if (remainingInnocents.length <= 1) {
+        const result = { impostorWon: true, impostorName: state.players.get(round.impostorId)?.name, footballer: round.footballer };
+        return { 
+            state: { ...state, phase: types_1.GamePhase.REVEAL, currentRound: { ...round, result } }, 
+            sideEffects: [
+                { type: 'CLEAR_TIMER' },
+                { type: 'ANNOUNCE_PUBLIC', message: `💀 ${votedName} era INOCENTE. ¡Gana el Impostor por mayoría!` }
+            ] 
+        };
+    }
+
+    // 4. EL JUEGO SIGUE: Nueva ronda de pistas con los que quedan
+    const nextRound = {
+        ...round,
+        normalPlayerIds: remainingInnocents,
+        clueOrder: round.clueOrder.filter(id => id !== votedOutId), // Sacamos al expulsado de los turnos
+        currentClueIndex: 0,
+        clues: new Map(), // Limpiamos pistas viejas
+        votes: new Map()  // Limpiamos votos viejos
+    };
 
     return { 
-        state: { ...state, phase: types_1.GamePhase.REVEAL, currentRound: { ...round, result } }, 
+        state: { ...state, phase: types_1.GamePhase.CLUES, currentRound: nextRound }, 
         sideEffects: [
             { type: 'CLEAR_TIMER' },
-            { type: 'ANNOUNCE_PUBLIC', message: isImpostor ? `🎯 ¡LO CAZARON! ${name} era el Impostor.` : `❌ ${name} era inocente. ¡Gana el Impostor!` }
+            { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} era Inocente. ¡Sigue la búsqueda!` },
+            { type: 'ANNOUNCE_PUBLIC', message: `📝 NUEVA RONDA DE PISTAS...` },
+            { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
         ] 
     };
 }
