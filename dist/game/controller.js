@@ -186,13 +186,27 @@ class GameController {
         return n(foot).split(/\s+/).some(p => p.length > 2 && c.includes(p));
     }
 
-    setPhaseTimer(sec) {
+ setPhaseTimer(sec) {
         this.clearPhaseTimer();
         this.phaseTimer = setTimeout(() => {
             let type = null;
-            if (this.state.phase === types_1.GamePhase.CLUES) type = 'CLUE_TIMEOUT';
+            
+            if (this.state.phase === types_1.GamePhase.CLUES) {
+                this.adapter.sendAnnouncement("⏰ Tiempo agotado. Saltando turno...", null, { color: 0xFFA500 });
+                
+                const currentGiverId = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
+                
+                this.applyTransition((0, state_machine_1.transition)(this.state, { 
+                    type: 'SUBMIT_CLUE', 
+                    playerId: currentGiverId, 
+                    clue: "No dio pista (Tiempo agotado)" 
+                }));
+                return;
+            }
+            
             else if (this.state.phase === types_1.GamePhase.DISCUSSION) type = 'END_DISCUSSION';
             else if (this.state.phase === types_1.GamePhase.VOTING) type = 'END_VOTING';
+            
             if (type) this.applyTransition((0, state_machine_1.transition)(this.state, { type }));
         }, sec * 1000);
     }
