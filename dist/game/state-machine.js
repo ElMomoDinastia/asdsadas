@@ -63,17 +63,23 @@ function transition(state, action) {
 function handlePlayerJoin(state, player) {
     const newPlayers = new Map(state.players);
     newPlayers.set(player.id, player);
+    
+    // Limpiamos la cola de fantasmas apenas entra alguien nuevo
+    const cleanQueue = state.queue.filter(id => newPlayers.has(id));
+    
     const sideEffects = [{
         type: 'ANNOUNCE_PRIVATE',
         playerId: player.id,
         message: `🔴 EL IMPOSTOR | Escribe "jugar" para unirte`,
     }];
-    return { state: { ...state, players: newPlayers }, sideEffects };
+    return { state: { ...state, players: newPlayers, queue: cleanQueue }, sideEffects };
 }
 
 function handlePlayerLeave(state, playerId) {
     const newPlayers = new Map(state.players);
     newPlayers.delete(playerId);
+    
+    // Al salir alguien, lo quitamos de la cola inmediatamente
     const newQueue = state.queue.filter((id) => id !== playerId);
     let newState = { ...state, players: newPlayers, queue: newQueue };
     const sideEffects = [];
@@ -100,6 +106,7 @@ function handleJoinQueue(state, playerId) {
     const player = state.players.get(playerId);
     if (!player) return { state, sideEffects: [] };
 
+    // FILTRO DE SEGURIDAD: Solo permitimos IDs que están en el mapa actual
     const cleanQueue = state.queue.filter(id => state.players.has(id));
 
     if (cleanQueue.includes(playerId)) {
@@ -133,16 +140,17 @@ function handleJoinQueue(state, playerId) {
 }
 
 function handleLeaveQueue(state, playerId) {
-    const newQueue = state.queue.filter((id) => id !== playerId);
+    const newQueue = state.queue.filter((id) => id !== playerId && state.players.has(id));
     return { state: { ...state, queue: newQueue }, sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `👋 Alguien salió de la cola.` }] };
 }
 
 function handleStartGame(state, footballers) {
     if (state.phase !== types_1.GamePhase.WAITING) return { state, sideEffects: [] };
     
+    // Verificamos de nuevo antes de repartir roles
     const realQueue = state.queue.filter(id => state.players.has(id));
     if (realQueue.length < state.settings.minPlayers) {
-        return { state: { ...state, queue: realQueue }, sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: '❌ Jugadores insuficientes' }] };
+        return { state: { ...state, queue: realQueue }, sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: '❌ Jugadores insuficientes en sala' }] };
     }
 
     const roundPlayers = shuffle(realQueue).slice(0, 5);
@@ -278,7 +286,12 @@ function handleResetRound(state) {
 }
 
 function canPlayerAct(state, playerId, action) { return true; }
-function getCurrentActor(state) { return null; }
+function getCurrentActor(state) { 
+    if (state.phase === types_1.GamePhase.CLUES && state.currentRound) {
+        return state.currentRound.clueOrder[state.currentRound.currentClueIndex];
+    }
+    return null; 
+}
 function getPhaseDescription(phase) { return phase; }
 function handleEndReveal(state) { return handleResetGame(state); }
 function handleForceReveal(state) { return handleEndVoting(state); }
