@@ -32,7 +32,6 @@ class GameController {
         this.announceTimer = null;
         this.adapter = adapter;
         
-        // 1. INICIALIZACIÓN LIMPIA
         this.state = (0, state_machine_1.createInitialState)({
             minPlayers: 5,
             clueTimeSeconds: config_1.config.clueTime || 30,
@@ -57,20 +56,16 @@ class GameController {
     handleRoomLink(link) { logger_1.gameLogger.info({ link }, 'Room is ready'); }
 
     async handlePlayerJoin(player) {
-        // SEGURIDAD: Limpiar cualquier rastro previo del mismo ID
         this.state.players.delete(player.id);
-        
         for (const existing of this.state.players.values()) {
             if (existing.name.toLowerCase() === player.name.toLowerCase()) {
                 this.adapter.kickPlayer(player.id, 'Nombre duplicado');
                 return;
             }
         }
-
         try {
             await PlayerLog.create({ name: player.name, auth: player.auth, conn: player.conn, room: config_1.config.roomName });
         } catch (e) {}
-
         const gamePlayer = { id: player.id, name: player.name, auth: player.auth, isAdmin: player.admin, joinedAt: Date.now() };
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer }));
     }
@@ -80,57 +75,78 @@ class GameController {
     }
 
     handlePlayerChat(player, message) {
-        const msg = message.trim().toLowerCase();
-        
-        // COMANDO DE EMERGENCIA PARA ADMINS
-        if (msg === "!limpiar" && player.admin) {
+        const msg = message.trim();
+        const msgLower = msg.toLowerCase();
+
+        // 1. COMANDO LIMPIAR
+        if (msgLower === "!limpiar" && player.admin) {
             this.state.queue = [];
-            this.adapter.sendAnnouncement("🧹 Cola limpiada manualmente por el Admin.", null, { color: 0xFFFF00 });
+            this.adapter.sendAnnouncement("🧹 Cola vaciada.", null, { color: 0xFFFF00 });
             return false;
         }
 
-        const command = (0, handler_1.parseCommand)(message);
-        const isAdmin = player.admin;
+        // 2. LÓGICA DE VOTACIÓN (Capturar números)
+        if (this.state.phase === "VOTING") {
+            const votedId = parseInt(msg);
+            if (!isNaN(votedId)) {
+                this.applyTransition((0, state_machine_1.transition)(this.state, { 
+                    type: 'SUBMIT_VOTE', 
+                    playerId: player.id, 
+                    votedId: votedId 
+                }));
+                return false; // No mostrar el número en el chat
+            }
+        }
 
-        // LÓGICA DE PISTAS (SPOILER CHECK)
+        // 3. LÓGICA DE PISTAS
         if (this.state.phase === "CLUES" && this.state.currentRound) {
             const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
             if (player.id === currentGiverId) {
-                const clueWord = message.trim().split(/\s+/)[0];
+                const clueWord = msg.split(/\s+/)[0];
                 if (clueWord && !this.containsSpoiler(clueWord, this.state.currentRound.footballer)) {
                     this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: clueWord }));
                     return false;
                 } else {
-                    this.adapter.sendAnnouncement("❌ ¡No puedes decir el nombre del futbolista!", player.id, { color: 0xFF0000 });
+                    this.adapter.sendAnnouncement("❌ No puedes spoilear.", player.id, { color: 0xFF0000 });
                     return false;
                 }
+            } else {
+                this.adapter.sendAnnouncement("🤫 Espera tu turno.", player.id, { color: 0xAAAAAA });
+                return false;
             }
         }
 
+        // 4. DEBATE (Permitir hablar)
+        if (this.state.phase === "DISCUSSION") {
+            return true; // AQUÍ ES DONDE SE PERMITE HABLAR
+        }
+
+        // 5. COMANDOS (jugar, etc)
+        const command = (0, handler_1.parseCommand)(message);
         const validation = (0, handler_1.validateCommand)(command, player, this.state, this.state.currentRound?.footballer);
+        
         if (validation.valid && validation.action) {
             this.applyTransition((0, state_machine_1.transition)(this.state, validation.action));
-        } else if (!validation.valid && command.type !== "REGULAR_MESSAGE") {
-            this.adapter.sendAnnouncement(`❌ ${validation.error}`, player.id, { color: 0xff6b6b });
+            return false;
         }
-        return false;
+
+        // Por defecto, si no hay juego activo, dejar chatear
+        return this.state.phase === "WAITING" || this.state.phase === "RESULTS";
     }
 
     applyTransition(result) {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
-
         if (this.state.phase === "ASSIGN") {
             this.setupGameField();
             this.assignDelayTimer = setTimeout(() => {
                 this.applyTransition((0, state_machine_1.transitionToClues)(this.state));
             }, 3000);
         }
-
         if (this.state.phase === "RESULTS") {
             setTimeout(() => {
                 this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'RESET_GAME' }));
-                this.adapter.stopGame(); // Detiene el juego visualmente al terminar
+                this.adapter.stopGame();
             }, 8000);
         }
     }
@@ -151,13 +167,9 @@ class GameController {
                     this.clearPhaseTimer(); 
                     break;
                 case 'AUTO_START_GAME': 
-                    // VALIDACIÓN FINAL: Solo iniciar si los 5 están presentes
                     const actualInRoom = this.state.queue.filter(id => this.state.players.has(id));
                     if (actualInRoom.length >= 5) {
                         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'START_GAME', footballers: this.footballers }));
-                    } else {
-                        this.state.queue = actualInRoom; // Corregir cola
-                        this.adapter.sendAnnouncement("⚠️ Error: Algunos jugadores ya no están. Reintentando...", null, {color: 0xFFCC00});
                     }
                     break;
             }
@@ -167,7 +179,6 @@ class GameController {
     containsSpoiler(clue, footballer) {
         const clueLower = clue.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const footballerLower = footballer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        // Verifica si la pista contiene partes del nombre (ej: "Messi" -> no puede decir "Mess")
         return footballerLower.split(/\s+/).some(part => part.length > 2 && clueLower.includes(part));
     }
 
@@ -176,30 +187,14 @@ class GameController {
         try {
             const roundPlayerIds = [...this.state.currentRound.normalPlayerIds, this.state.currentRound.impostorId];
             await this.adapter.stopGame();
-            
             const allPlayers = await this.adapter.getPlayerList();
-            for (const p of allPlayers) {
-                if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0); // Todos a Spectators
-            }
-
-            for (const id of roundPlayerIds) {
-                await this.adapter.setPlayerTeam(id, 1); // Jugadores a Red Team
-            }
-
+            for (const p of allPlayers) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+            for (const id of roundPlayerIds) await this.adapter.setPlayerTeam(id, 1);
             await this.adapter.startGame();
-            
-            // Ubicar a los jugadores en los asientos
             for (let i = 0; i < roundPlayerIds.length && i < SEAT_POSITIONS.length; i++) {
-                await this.adapter.setPlayerDiscProperties(roundPlayerIds[i], { 
-                    x: SEAT_POSITIONS[i].x, 
-                    y: SEAT_POSITIONS[i].y, 
-                    xspeed: 0, 
-                    yspeed: 0 
-                });
+                await this.adapter.setPlayerDiscProperties(roundPlayerIds[i], { x: SEAT_POSITIONS[i].x, y: SEAT_POSITIONS[i].y, xspeed: 0, yspeed: 0 });
             }
-        } catch (error) { 
-            logger_1.gameLogger.error({ error }, 'Failed field setup'); 
-        }
+        } catch (error) { logger_1.gameLogger.error({ error }, 'Field error'); }
     }
 
     setPhaseTimer(duration) {
@@ -217,21 +212,16 @@ class GameController {
         if (this.state.phase === "CLUES") type = "CLUE_TIMEOUT";
         else if (this.state.phase === "DISCUSSION") type = "END_DISCUSSION";
         else if (this.state.phase === "VOTING") type = "END_VOTING";
-        
         if (type) this.applyTransition((0, state_machine_1.transition)(this.state, { type }));
     }
 
     async start() {
         await this.adapter.initialize();
         this.announceTimer = setInterval(() => {
-            this.adapter.sendAnnouncement("📢 Sala creada por: 【 𝙏𝙚𝙡𝙚𝙚𝙨𝙚 】", null, { color: 0x00FF00 });
+            this.adapter.sendAnnouncement("📢 Sala: 【 𝙏𝙚𝙡𝙚𝙚𝙨𝙚 】", null, { color: 0x00FF00 });
         }, 5 * 60 * 1000);
     }
 
-    stop() { 
-        this.clearPhaseTimer(); 
-        this.adapter.close(); 
-        if (this.announceTimer) clearInterval(this.announceTimer); 
-    }
+    stop() { this.clearPhaseTimer(); this.adapter.close(); if (this.announceTimer) clearInterval(this.announceTimer); }
 }
 exports.GameController = GameController;
