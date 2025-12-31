@@ -134,25 +134,55 @@ class GameController {
         return false;
     }
 
-    applyTransition(result) {
+   applyTransition(result) {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
         
-        // Manejo automático de transiciones de fase
+        // --- LÓGICA DE AUTO-START CON GESTIÓN DE COLA ---
+        if (this.state.phase === types_1.GamePhase.LOBBY) {
+            
+            // Calculamos cuántos jugadores hay listos (en cola o en la sala)
+            const availableInQueue = this.state.queue.length;
+            const totalInRoom = this.state.players.size;
+
+            // Priorizamos la cola si hay 5 o más esperando
+            if (availableInQueue >= 5 || totalInRoom >= 5) {
+                
+                if (this.assignDelayTimer) clearTimeout(this.assignDelayTimer);
+
+                this.adapter.sendAnnouncement(`📢 ¡Ronda terminada! Iniciando con los nuevos jugadores en 5s...`, null, { color: 0x00FF00, fontWeight: 'bold' });
+                
+                this.assignDelayTimer = setTimeout(() => {
+                    if (this.state.phase === types_1.GamePhase.LOBBY) {
+                        // Forzamos el inicio de partida
+                        this.applyTransition((0, state_machine_1.transition)(this.state, { 
+                            type: 'START_GAME', 
+                            footballers: this.footballers 
+                        }));
+                    }
+                }, 5000);
+            }
+        }
+
+        // --- TRANSICIONES AUTOMÁTICAS ---
         if (this.state.phase === types_1.GamePhase.ASSIGN) {
             this.setupGameField();
             this.assignDelayTimer = setTimeout(() => {
                 this.applyTransition((0, state_machine_1.transitionToClues)(this.state));
             }, 3000);
         }
+
         if (this.state.phase === types_1.GamePhase.REVEAL) {
             setTimeout(() => this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'END_REVEAL' })), 4000);
         }
+
         if (this.state.phase === types_1.GamePhase.RESULTS) {
-            setTimeout(() => this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'RESET_GAME' })), 8000);
+            // Este timeout devuelve el juego al LOBBY, activando el bloque de arriba
+            setTimeout(() => {
+                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'RESET_GAME' }));
+            }, 8000);
         }
     }
-
     async setupGameField() {
         if (!this.state.currentRound) return;
         const roundIds = [...this.state.currentRound.normalPlayerIds, this.state.currentRound.impostorId];
