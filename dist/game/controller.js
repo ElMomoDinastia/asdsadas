@@ -147,11 +147,47 @@ class GameController {
         } catch (e) { logger_1.gameLogger.error("Error en setup:", e); }
     }
 
-    executeSideEffects(effects) {
+executeSideEffects(effects) {
         effects.forEach(e => {
-            if (e.type === 'ANNOUNCE_PUBLIC') this.adapter.sendAnnouncement(e.message, null, e.style);
-            if (e.type === 'ANNOUNCE_PRIVATE') this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xffff00 });
-            if (e.type === 'SET_PHASE_TIMER') this.setPhaseTimer(e.durationSeconds);
+            switch (e.type) {
+                case 'ANNOUNCE_PUBLIC':
+                    this.adapter.sendAnnouncement(e.message, null, e.style);
+                    break;
+
+                case 'ANNOUNCE_PRIVATE':
+                    // El delay de 150ms asegura que el jugador reciba su rol 
+                    // después de que el juego haya cargado/reiniciado.
+                    setTimeout(() => {
+                        this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xffff00, style: 'bold' });
+                    }, 150);
+                    break;
+
+                case 'SET_PHASE_TIMER':
+                    this.setPhaseTimer(e.durationSeconds);
+                    break;
+
+                case 'CLEAR_TIMER':
+                    if (this.phaseTimer) {
+                        clearTimeout(this.phaseTimer);
+                        this.phaseTimer = null;
+                    }
+                    break;
+
+                case 'AUTO_START_GAME':
+                    // Esto permite que el juego arranque solo al llegar a 5/5
+                    if (this.assignDelayTimer) clearTimeout(this.assignDelayTimer);
+                    this.assignDelayTimer = setTimeout(() => {
+                        this.applyTransition((0, state_machine_1.transition)(this.state, { 
+                            type: 'START_GAME', 
+                            footballers: this.footballers 
+                        }));
+                    }, 2000);
+                    break;
+
+                case 'LOG_ROUND':
+                    logger_1.gameLogger.info({ result: e.result }, 'Ronda finalizada y guardada');
+                    break;
+            }
         });
     }
 
