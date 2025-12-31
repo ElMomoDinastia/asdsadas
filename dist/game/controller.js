@@ -1,323 +1,363 @@
 "use strict";
+/**
+ * Game Controller - Orchestrates the game logic and room adapter
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
-  return (mod && mod.__esModule) ? mod : { "default": mod };
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameController = void 0;
-
-const { createInitialState, transition, transitionToClues } = require("../game/state-machine");
-const { parseCommand, validateCommand } = require("../commands/handler");
-const { gameLogger } = require("../utils/logger");
-const { config } = require("../config");
-const { GamePhase } = require("../game/types");
-const footballersJson = __importDefault(require("../data/footballers.json"));
-const mongoose = __importDefault(require("mongoose"));
-
-const PlayerLog = mongoose.default.model(
-  "PlayerLog",
-  new mongoose.default.Schema({
-    name: String,
-    auth: String,
-    conn: String,
-    room: String,
-    timestamp: { type: Date, default: Date.now },
-  })
-);
-
+const types_1 = require("../game/types");
+const state_machine_1 = require("../game/state-machine");
+const handler_1 = require("../commands/handler");
+const logger_1 = require("../utils/logger");
+const config_1 = require("../config");
+const footballers_json_1 = __importDefault(require("../data/footballers.json"));
+const SEAT_POSITIONS = [
+    { x: 0, y: -130 }, // Top (Seat 1)
+    { x: 124, y: -40 }, // Top-right (Seat 2)
+    { x: 76, y: 105 }, // Bottom-right (Seat 3)
+    { x: -76, y: 105 }, // Bottom-left (Seat 4)
+    { x: -124, y: -40 }, // Top-left (Seat 5)
+];
 class GameController {
-  constructor(adapter, footballers) {
-    this.adapter = adapter;
-    this.phaseTimer = null;
-    this.assignDelayTimer = null;
-    this.announceTimer = null;
-
-    this.state = createInitialState({
-      minPlayers: 5,
-      clueTimeSeconds: config.clueTime || 30,
-      discussionTimeSeconds: config.discussionTime || 30,
-      votingTimeSeconds: config.votingTime || 45,
-    });
-
-    this.footballers = footballers ?? footballersJson.default;
-    this.setupEventHandlers();
-  }
-
-  setupEventHandlers() {
-    this.adapter.setEventHandlers({
-      onPlayerJoin: this.handlePlayerJoin.bind(this),
-      onPlayerLeave: this.handlePlayerLeave.bind(this),
-      onPlayerChat: this.handlePlayerChat.bind(this),
-      onRoomLink: (link) => gameLogger.info({ link }, "Room ready"),
-    });
-  }
-
-  async handlePlayerJoin(player) {
-    for (const p of this.state.players.values()) {
-      if (p.name.toLowerCase() === player.name.toLowerCase()) {
-        this.adapter.kickPlayer(player.id, "Nombre duplicado");
-        return;
-      }
+    adapter;
+    state;
+    footballers;
+    phaseTimer = null;
+    assignDelayTimer = null;
+    roundLogs = [];
+    constructor(adapter, footballers) {
+        this.adapter = adapter;
+        this.state = (0, types_1.createInitialState)({
+            clueTimeSeconds: config_1.config.clueTime,
+            discussionTimeSeconds: config_1.config.discussionTime,
+            votingTimeSeconds: config_1.config.votingTime,
+        });
+        this.footballers = footballers ?? footballers_json_1.default;
+        this.setupEventHandlers();
     }
-
-    try {
-      await PlayerLog.create({
-        name: player.name,
-        auth: player.auth,
-        conn: player.conn,
-        room: config.roomName,
-      });
-    } catch {}
-
-    this.applyTransition(
-      transition(this.state, {
-        type: "PLAYER_JOIN",
-        player: {
-          id: player.id,
-          name: player.name,
-          auth: player.auth,
-          isAdmin: player.admin,
-          joinedAt: Date.now(),
-        },
-      })
-    );
-  }
-
-  handlePlayerLeave(player) {
-    this.applyTransition(
-      transition(this.state, { type: "PLAYER_LEAVE", playerId: player.id })
-    );
-  }
-
-  handlePlayerChat(player, message) {
-    const msg = message.trim();
-    const phase = this.state.phase;
-    const round = this.state.currentRound;
-
-    /* =====================
-       ADMIN QUICK COMMAND
-    ====================== */
-    if (msg.toLowerCase() === "!limpiar" && player.admin) {
-      this.state.queue = [];
-      this.adapter.sendAnnouncement("🧹 Cola vaciada.", null, { color: 0xffff00 });
-      return false;
+    setupEventHandlers() {
+        const handlers = {
+            onPlayerJoin: this.handlePlayerJoin.bind(this),
+            onPlayerLeave: this.handlePlayerLeave.bind(this),
+            onPlayerChat: this.handlePlayerChat.bind(this),
+            onRoomLink: this.handleRoomLink.bind(this),
+        };
+        this.adapter.setEventHandlers(handlers);
     }
-
-    /* =====================
-       COMMAND HANDLING
-    ====================== */
-    const command = parseCommand(message);
-    if (command && command.type !== "REGULAR_MESSAGE") {
-      const validation = validateCommand(
-        command,
-        player,
-        this.state,
-        round?.footballer
-      );
-
-      if (validation.valid && validation.action) {
-        this.applyTransition(transition(this.state, validation.action));
-      } else if (!validation.valid) {
-        this.adapter.sendAnnouncement(
-          `❌ ${validation.error}`,
-          player.id,
-          { color: 0xff6b6b }
-        );
-      }
-      return false;
+    handleRoomLink(link) {
+        logger_1.gameLogger.info({ link }, 'Room is ready');
     }
-
-    /* =====================
-       NO GAME → FREE CHAT
-    ====================== */
-    if (!round || phase === GamePhase.WAITING || phase === GamePhase.RESULTS) {
-      return true;
-    }
-
-    /* =====================
-       ACTIVE PLAYER CHECK
-    ====================== */
-    const isActive = this.isActiveRoundPlayer(player.id);
-
-    if (!isActive) {
-      this.adapter.sendAnnouncement(
-        "🚫 Estás fuera de la partida. Escribí 'jugar' para la próxima.",
-        player.id,
-        { color: 0xaaaaaa }
-      );
-      return false;
-    }
-
-    /* =====================
-       DISCUSSION → FREE TALK
-    ====================== */
-    if (phase === GamePhase.DISCUSSION) {
-      return true;
-    }
-
-    /* =====================
-       CLUES
-    ====================== */
-    if (phase === GamePhase.CLUES) {
-      const currentId = round.clueOrder[round.currentClueIndex];
-      if (player.id === currentId) {
-        const clue = msg.split(/\s+/)[0];
-        if (!this.containsSpoiler(clue, round.footballer)) {
-          this.applyTransition(
-            transition(this.state, {
-              type: "SUBMIT_CLUE",
-              playerId: player.id,
-              clue,
-            })
-          );
+    handlePlayerJoin(player) {
+        for (const existing of this.state.players.values()) {
+            if (existing.name.toLowerCase() === player.name.toLowerCase()) {
+                this.adapter.sendAnnouncement(`❌ El nombre "${player.name}" ya está en uso`, player.id, { color: 0xff0000 });
+                this.adapter.kickPlayer(player.id, 'Nombre duplicado - elige otro nombre');
+                return;
+            }
         }
-      }
-      return false;
+        const gamePlayer = {
+            id: player.id,
+            name: player.name,
+            auth: player.auth,
+            isAdmin: player.admin,
+            joinedAt: Date.now()
+        };
+        const result = (0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer });
+        this.applyTransition(result);
     }
-
-    /* =====================
-       VOTING
-    ====================== */
-    if (phase === GamePhase.VOTING) {
-      const votedId = parseInt(msg, 10);
-      if (!isNaN(votedId)) {
-        this.applyTransition(
-          transition(this.state, {
-            type: "SUBMIT_VOTE",
-            playerId: player.id,
-            votedId,
-          })
-        );
-      }
-      return false;
+    handlePlayerLeave(player) {
+        const result = (0, state_machine_1.transition)(this.state, { type: 'PLAYER_LEAVE', playerId: player.id });
+        this.applyTransition(result);
     }
-
-    return false;
-  }
-
-  /* =====================
-     GAME STATE
-  ====================== */
-
-  applyTransition(result) {
-    this.state = result.state;
-    this.executeSideEffects(result.sideEffects);
-
-    if (this.state.phase === GamePhase.ASSIGN) {
-      this.setupGameField();
-      this.assignDelayTimer = setTimeout(() => {
-        this.applyTransition(transitionToClues(this.state));
-      }, 3000);
+    handlePlayerChat(player, message) {
+        const command = (0, handler_1.parseCommand)(message);
+        const isAdmin = player.admin;
+        // 1. GESTIÓN DE ESPECTADORES Y ELIMINADOS (FANTASMAS)
+        const activePhases = [types_1.GamePhase.CLUES, types_1.GamePhase.DISCUSSION, types_1.GamePhase.VOTING, types_1.GamePhase.REVEAL];
+        if (activePhases.includes(this.state.phase) && this.state.currentRound) {
+            if (!this.isPlayerInRound(player.id) && !isAdmin) {
+                // Si un eliminado o espectador intenta usar "jugar"
+                if (command && command.type === handler_1.CommandType.JOIN) {
+                    if (this.state.queue.includes(player.id)) {
+                        this.adapter.sendAnnouncement(`⏳ Ya estás en cola para la próxima ronda.`, player.id, { color: 0x00bfff });
+                        return false;
+                    }
+                    this.state.queue = [...this.state.queue, player.id];
+                    this.adapter.sendAnnouncement(`✅ ${player.name} se anotó para la próxima partida`, null, { color: 0x00ff00 });
+                    return false;
+                }
+                // Bloquear chat normal para los que no están en la ronda (muertos/espectadores)
+                this.adapter.sendAnnouncement('👻 Los muertos no hablan... (Solo puedes mirar hasta que termine)', player.id, { color: 0xaaaaaa });
+                return false;
+            }
+        }
+        // 2. FASE DE PISTAS: Control de turnos y spoilers
+        if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
+            const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
+            // Si no es su turno
+            if (player.id !== currentGiverId && !isAdmin) {
+                this.adapter.sendAnnouncement('⏳ Espera tu turno para dar la pista...', player.id, { color: 0xffaa00 });
+                return false;
+            }
+            // Si es admin hablando fuera de turno, lo dejamos pasar como anuncio especial
+            if (player.id !== currentGiverId && isAdmin) {
+                this.adapter.sendAnnouncement(`👑 ${player.name}: ${message}`, null, { color: 0xffd700 });
+                return false;
+            }
+            // Es el turno del jugador: Validar palabra única y spoilers
+            const clueWord = message.trim().split(/\s+/)[0];
+            if (clueWord) {
+                const secretFootballer = this.state.currentRound?.footballer;
+                if (secretFootballer && this.containsSpoiler(clueWord, secretFootballer)) {
+                    this.adapter.sendAnnouncement('❌ ¡No puedes decir el nombre del futbolista!', player.id, { color: 0xff6b6b });
+                    return false;
+                }
+                const result = (0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: clueWord });
+                this.applyTransition(result);
+                return false;
+            }
+        }
+        // 3. MENSAJES REGULARES (Chat de discusión o general)
+        if (!command || command.type === handler_1.CommandType.REGULAR_MESSAGE) {
+            // Solo permitimos chat general si no estamos en fase de pistas (donde el chat es estricto)
+            // o si el jugador es parte de la discusión activa.
+            this.adapter.sendAnnouncement(`${player.name}: ${message}`, null, { color: 0xffffff });
+            return false;
+        }
+        // 4. PROCESAMIENTO DE COMANDOS (!help, !status, etc.)
+        logger_1.gameLogger.debug({ playerId: player.id, command: command.type }, 'Command received');
+        if (command.type === handler_1.CommandType.HELP) {
+            this.adapter.sendAnnouncement((0, handler_1.generateHelpText)(this.state.phase, isAdmin), player.id, { color: 0x00bfff });
+            return false;
+        }
+        if (command.type === handler_1.CommandType.STATUS) {
+            this.adapter.sendAnnouncement((0, handler_1.generateStatusText)(this.state), player.id, { color: 0x00bfff });
+            return false;
+        }
+        if (command.type === handler_1.CommandType.CLAIM_ADMIN) {
+            this.adapter.setPlayerAdmin(player.id, true);
+            this.adapter.sendAnnouncement('👑 Ahora eres administrador', player.id, { color: 0xffd700 });
+            return false;
+        }
+        // 5. VALIDACIÓN DE COMANDOS DE JUEGO (!v, !start)
+        const secretFootballer = this.state.currentRound?.footballer;
+        const validation = (0, handler_1.validateCommand)(command, player, this.state, secretFootballer);
+        if (!validation.valid) {
+            this.adapter.sendAnnouncement(`❌ ${validation.error}`, player.id, { color: 0xff6b6b });
+            return false;
+        }
+        if (validation.action) {
+            // Si el comando es empezar, inyectamos la lista de futbolistas
+            if (validation.action.type === 'START_GAME') {
+                validation.action = { type: 'START_GAME', footballers: this.footballers };
+            }
+            const result = (0, state_machine_1.transition)(this.state, validation.action);
+            this.applyTransition(result);
+        }
+        return false;
     }
-
-    if (this.state.phase === GamePhase.RESULTS) {
-      setTimeout(() => {
-        this.applyTransition(transition(this.state, { type: "RESET_GAME" }));
-        this.adapter.stopGame();
-      }, 8000);
+    applyTransition(result) {
+        this.state = result.state;
+        this.executeSideEffects(result.sideEffects);
+        if (this.state.phase === types_1.GamePhase.ASSIGN) {
+            this.setupGameField();
+            this.assignDelayTimer = setTimeout(() => {
+                const cluesResult = (0, state_machine_1.transitionToClues)(this.state);
+                this.applyTransition(cluesResult);
+            }, 3000);
+        }
+        if (this.state.phase === types_1.GamePhase.REVEAL) {
+            setTimeout(() => {
+                const revealResult = (0, state_machine_1.transition)(this.state, { type: 'END_REVEAL' });
+                this.applyTransition(revealResult);
+            }, 3000);
+        }
+        if (this.state.phase === types_1.GamePhase.RESULTS) {
+            setTimeout(() => {
+                const resetResult = (0, state_machine_1.transition)(this.state, { type: 'RESET_GAME' });
+                this.applyTransition(resetResult);
+            }, 8000);
+        }
     }
-  }
-
-  executeSideEffects(effects) {
-    for (const e of effects) {
-      if (e.type === "ANNOUNCE_PUBLIC") this.adapter.sendAnnouncement(e.message);
-      if (e.type === "ANNOUNCE_PRIVATE")
-        this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xffff00 });
-      if (e.type === "SET_PHASE_TIMER") this.setPhaseTimer(e.durationSeconds);
-      if (e.type === "CLEAR_TIMER") this.clearPhaseTimer();
-      if (e.type === "AUTO_START_GAME") {
-        const ready = this.state.queue.filter((id) => this.state.players.has(id));
-        if (ready.length >= 5)
-          this.applyTransition(
-            transition(this.state, {
-              type: "START_GAME",
-              footballers: this.footballers,
-            })
-          );
-      }
+    containsSpoiler(clue, footballer) {
+        const clueLower = clue.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const footballerLower = footballer.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const nameParts = footballerLower.split(/\s+/);
+        for (const part of nameParts) {
+            if (part.length > 2 && clueLower.includes(part)) {
+                return true;
+            }
+        }
+        return false;
     }
-  }
-
-  /* =====================
-     HELPERS
-  ====================== */
-
-  isActiveRoundPlayer(playerId) {
-    const r = this.state.currentRound;
-    if (!r) return false;
-    return (
-      r.impostorId === playerId ||
-      r.normalPlayerIds.includes(playerId)
-    );
-  }
-
-  containsSpoiler(clue, footballer) {
-    const clean = (s) =>
-      s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return clean(footballer)
-      .split(/\s+/)
-      .some(p => p.length > 2 && clean(clue).includes(p));
-  }
-
-  async setupGameField() {
-    if (!this.state.currentRound) return;
-    try {
-      const ids = [
-        ...this.state.currentRound.normalPlayerIds,
-        this.state.currentRound.impostorId,
-      ];
-
-      await this.adapter.stopGame();
-      const players = await this.adapter.getPlayerList();
-
-      for (const p of players)
-        if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
-
-      for (const id of ids)
-        await this.adapter.setPlayerTeam(id, 1);
-
-      await this.adapter.startGame();
-    } catch (e) {
-      gameLogger.error(e);
+    async setupGameField() {
+        if (!this.state.currentRound)
+            return;
+        try {
+            const roundPlayerIds = [
+                ...this.state.currentRound.normalPlayerIds,
+                this.state.currentRound.impostorId,
+            ];
+            logger_1.gameLogger.info({ playerCount: roundPlayerIds.length, playerIds: roundPlayerIds }, 'Setting up game field');
+            await this.adapter.setTeamsLock(true);
+            logger_1.gameLogger.info('Teams locked');
+            await this.adapter.stopGame();
+            await new Promise(resolve => setTimeout(resolve, 100));
+            const allPlayers = await this.adapter.getPlayerList();
+            for (const player of allPlayers) {
+                if (player.id !== 0) {
+                    await this.adapter.setPlayerTeam(player.id, 0);
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+            logger_1.gameLogger.info('All players moved to spectators');
+            for (const playerId of roundPlayerIds) {
+                await this.adapter.setPlayerTeam(playerId, 1);
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            logger_1.gameLogger.info('Round players moved to red team');
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await this.adapter.startGame();
+            logger_1.gameLogger.info('Game started');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            for (let i = 0; i < roundPlayerIds.length && i < SEAT_POSITIONS.length; i++) {
+                const playerId = roundPlayerIds[i];
+                const seat = SEAT_POSITIONS[i];
+                await this.adapter.setPlayerDiscProperties(playerId, {
+                    x: seat.x,
+                    y: seat.y,
+                    xspeed: 0,
+                    yspeed: 0,
+                });
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            logger_1.gameLogger.info({ playerCount: roundPlayerIds.length }, 'All players positioned in seats');
+        }
+        catch (error) {
+            logger_1.gameLogger.error({ error }, 'Failed to setup game field');
+        }
     }
-  }
-
-  setPhaseTimer(seconds) {
-    this.clearPhaseTimer();
-    this.phaseTimer = setTimeout(
-      () => this.handlePhaseTimeout(),
-      seconds * 1000
-    );
-  }
-
-  clearPhaseTimer() {
-    if (this.phaseTimer) clearTimeout(this.phaseTimer);
-    if (this.assignDelayTimer) clearTimeout(this.assignDelayTimer);
-  }
-
-  handlePhaseTimeout() {
-    const map = {
-      [GamePhase.CLUES]: "CLUE_TIMEOUT",
-      [GamePhase.DISCUSSION]: "END_DISCUSSION",
-      [GamePhase.VOTING]: "END_VOTING",
-    };
-    const type = map[this.state.phase];
-    if (type) this.applyTransition(transition(this.state, { type }));
-  }
-
-  async start() {
-    await this.adapter.initialize();
-    this.announceTimer = setInterval(() => {
-      this.adapter.sendAnnouncement("📢 Sala: 【 𝙏𝙚𝙡𝙚𝙚𝙨𝙚 】");
-    }, 5 * 60 * 1000);
-  }
-
-  stop() {
-    this.clearPhaseTimer();
-    this.adapter.close();
-    if (this.announceTimer) clearInterval(this.announceTimer);
-  }
+    isPlayerInRound(playerId) {
+        if (!this.state.currentRound)
+            return false;
+        return this.state.currentRound.clueOrder.includes(playerId);
+    }
+    executeSideEffects(effects) {
+        for (const effect of effects) {
+            switch (effect.type) {
+                case 'ANNOUNCE_PUBLIC':
+                    this.adapter.sendAnnouncement(effect.message, null, effect.style);
+                    break;
+                case 'ANNOUNCE_PRIVATE':
+                    this.adapter.sendAnnouncement(effect.message, effect.playerId, { color: 0xffff00 });
+                    break;
+                case 'SET_PHASE_TIMER':
+                    this.setPhaseTimer(effect.durationSeconds);
+                    break;
+                case 'CLEAR_TIMER':
+                    this.clearPhaseTimer();
+                    break;
+                case 'LOG_ROUND':
+                    this.logRound(effect.result);
+                    break;
+                case 'AUTO_START_GAME':
+                    setTimeout(() => {
+                        logger_1.gameLogger.info('Auto-starting game...');
+                        const startResult = (0, state_machine_1.transition)(this.state, {
+                            type: 'START_GAME',
+                            footballers: this.footballers,
+                        });
+                        this.applyTransition(startResult);
+                    }, 2000);
+                    break;
+            }
+        }
+    }
+    setPhaseTimer(durationSeconds) {
+        this.clearPhaseTimer();
+        logger_1.gameLogger.debug({ durationSeconds }, 'Setting phase timer');
+        this.phaseTimer = setTimeout(() => {
+            this.handlePhaseTimeout();
+        }, durationSeconds * 1000);
+    }
+    clearPhaseTimer() {
+        if (this.phaseTimer) {
+            clearTimeout(this.phaseTimer);
+            this.phaseTimer = null;
+        }
+        if (this.assignDelayTimer) {
+            clearTimeout(this.assignDelayTimer);
+            this.assignDelayTimer = null;
+        }
+    }
+    handlePhaseTimeout() {
+        logger_1.gameLogger.debug({ phase: this.state.phase }, 'Phase timeout');
+        let result;
+        switch (this.state.phase) {
+            case types_1.GamePhase.CLUES:
+                result = (0, state_machine_1.transition)(this.state, { type: 'CLUE_TIMEOUT' });
+                break;
+            case types_1.GamePhase.DISCUSSION:
+                result = (0, state_machine_1.transition)(this.state, { type: 'END_DISCUSSION' });
+                break;
+            case types_1.GamePhase.VOTING:
+                result = (0, state_machine_1.transition)(this.state, { type: 'END_VOTING' });
+                break;
+            case types_1.GamePhase.REVEAL:
+                result = (0, state_machine_1.transition)(this.state, { type: 'END_REVEAL' });
+                break;
+            default:
+                return;
+        }
+        this.applyTransition(result);
+    }
+    logRound(result) {
+        this.roundLogs.push(result);
+        logger_1.gameLogger.info({
+            roundResult: {
+                impostorWon: result.impostorWon,
+                impostorName: result.impostorName,
+                footballer: result.footballer,
+                votedOutName: result.votedOutName,
+            },
+        }, 'Round completed');
+    }
+    getState() {
+        return this.state;
+    }
+    getRoomLink() {
+        return this.adapter.getRoomLink();
+    }
+    isRoomInitialized() {
+        return this.adapter.isInitialized();
+    }
+    getPlayerCount() {
+        return this.state.players.size;
+    }
+    getQueueCount() {
+        return this.state.queue.length;
+    }
+    getRoundsPlayed() {
+        return this.state.roundHistory.length;
+    }
+    getCurrentPhase() {
+        return this.state.phase;
+    }
+    setFootballers(footballers) {
+        this.footballers = footballers;
+        logger_1.gameLogger.info({ count: footballers.length }, 'Footballer list updated');
+    }
+    async start() {
+        await this.adapter.initialize();
+        logger_1.gameLogger.info('Game controller started');
+    }
+    stop() {
+        this.clearPhaseTimer();
+        this.adapter.close();
+        logger_1.gameLogger.info('Game controller stopped');
+    }
 }
-
 exports.GameController = GameController;
-
+//# sourceMappingURL=controller.js.map
