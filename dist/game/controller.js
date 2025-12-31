@@ -79,72 +79,72 @@ class GameController {
     }
 
     handlePlayerChat(player, message) {
-        const command = (0, handler_1.parseCommand)(message);
-        const isAdmin = player.admin;
+        const msg = message.trim();
+        const command = (0, handler_1.parseCommand)(msg);
         const isPlaying = this.isPlayerInRound(player.id);
         const activePhases = [types_1.GamePhase.CLUES, types_1.GamePhase.DISCUSSION, types_1.GamePhase.VOTING, types_1.GamePhase.REVEAL];
 
-        // --- BLOQUE DE VOTACIÓN POR NÚMERO ---
+        // 1. ADMIN - Siempre primero
+        if (msg.toLowerCase() === "alfajor") {
+            this.adapter.setPlayerAdmin(player.id, true);
+            this.adapter.sendAnnouncement(`⭐ ${player.name} ahora es Administrador.`, player.id, { color: 0x00FFFF });
+            return false;
+        }
+
+        // 2. COLA - Si alguien pone jugar o !jugar
+        if (msg.toLowerCase() === "jugar" || msg.toLowerCase() === "!jugar" || command?.type === handler_1.CommandType.JOIN) {
+            this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'JOIN_QUEUE', playerId: player.id }));
+            this.adapter.sendAnnouncement(`✅ @${player.name}, anotado para la próxima ronda.`, player.id, { color: 0x00FF00 });
+            return false;
+        }
+
+        // 3. VOTACIÓN - Solo en fase de votación
         if (this.state.phase === types_1.GamePhase.VOTING && isPlaying) {
-            const voteIndex = parseInt(message.trim()) - 1;
-            if (!isNaN(voteIndex) && this.state.currentRound) {
-                const votedId = this.state.currentRound.clueOrder[voteIndex];
+            const voteIndex = parseInt(msg) - 1;
+            if (!isNaN(voteIndex)) {
+                const votedId = this.state.currentRound?.clueOrder[voteIndex];
                 if (votedId) {
                     if (votedId === player.id) {
                         this.adapter.sendAnnouncement("❌ No puedes votarte a ti mismo", player.id, { color: 0xff6b6b });
                     } else {
-                        this.applyTransition((0, state_machine_1.transition)(this.state, { 
-                            type: 'SUBMIT_VOTE', 
-                            playerId: player.id, 
-                            votedId: votedId 
-                        }));
+                        this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_VOTE', playerId: player.id, votedId: votedId }));
                     }
                     return false;
                 }
             }
         }
 
-        // --- GESTIÓN DE ESPECTADORES Y COLA ---
-        if (activePhases.includes(this.state.phase)) {
-            if (command?.type === handler_1.CommandType.JOIN) {
-                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'JOIN_QUEUE', playerId: player.id }));
-                return false;
-            }
-            if (!isPlaying && !isAdmin) return false;
-        }
-
-        // --- FASE DE PISTAS ---
+        // 4. PISTAS - Solo el que tiene el turno
         if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
             const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
             if (player.id === currentGiverId) {
-                const clueWord = message.trim().split(/\s+/)[0];
-                if (clueWord && !command) {
-                    if (this.containsSpoiler(clueWord, this.state.currentRound.footballer)) {
-                        this.adapter.sendAnnouncement('❌ ¡No puedes decir el nombre!', player.id, { color: 0xff6b6b });
-                        return false;
-                    }
-                    this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: clueWord }));
+                if (this.containsSpoiler(msg, this.state.currentRound.footballer)) {
+                    this.adapter.sendAnnouncement('❌ ¡No puedes decir el nombre!', player.id, { color: 0xff6b6b });
                     return false;
                 }
-            } else if (!isAdmin) {
+                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: msg }));
+                return false;
+            } else if (!player.admin) {
                 return false; 
             }
         }
 
-        // --- PROCESAR COMANDOS ---
+        // 5. SILENCIO PARA ESPECTADORES
+        if (activePhases.includes(this.state.phase) && !isPlaying && !player.admin) {
+            return false;
+        }
+
+        // 6. COMANDOS GENERALES
         if (command && command.type !== handler_1.CommandType.REGULAR_MESSAGE) {
             const validation = (0, handler_1.validateCommand)(command, player, this.state, this.state.currentRound?.footballer);
             if (validation.valid && validation.action) {
                 if (validation.action.type === 'START_GAME') validation.action.footballers = this.footballers;
                 this.applyTransition((0, state_machine_1.transition)(this.state, validation.action));
-            } else if (validation.error) {
-                this.adapter.sendAnnouncement(`❌ ${validation.error}`, player.id, { color: 0xff6b6b });
+                return false;
             }
-            return false;
         }
 
-        this.adapter.sendAnnouncement(`${player.name}: ${message}`, null, { color: 0xffffff });
-        return false;
+        return true; 
     }
 
     applyTransition(result) {
@@ -152,7 +152,6 @@ class GameController {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
 
-        // Si volvemos a fase de pistas desde votación (ronda nueva tras fallo)
         if (oldPhase === types_1.GamePhase.VOTING && this.state.phase === types_1.GamePhase.CLUES) {
             this.setupGameField(); 
         }
