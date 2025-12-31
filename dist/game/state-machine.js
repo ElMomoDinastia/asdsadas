@@ -29,9 +29,9 @@ function transition(state, action) {
             const message = playerPosition <= 5 
                 ? `✅ @${playerName} anotado (${playerPosition}/5)`
                 : `⏳ @${playerName} en espera (Posición: ${playerPosition - 5})`;
-            return { state: { ...state, queue: updatedQueue }, sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message }] };
+            return { state: { ...state, queue: updatedQueue }, sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message, style: { color: 0x00FFCC } }] };
 
-        case 'START_GAME':
+        case 'START_GAME': {
             const participants = state.queue.slice(0, 5);
             const impostorId = participants[Math.floor(Math.random() * participants.length)];
             const footballer = action.footballers[Math.floor(Math.random() * action.footballers.length)];
@@ -42,15 +42,19 @@ function transition(state, action) {
                 currentClueIndex: 0,
                 clues: new Map(), votes: new Map()
             };
-            const effects = [{ type: 'ANNOUNCE_PUBLIC', message: '🕵️ RONDA INICIADA. Revisen sus mensajes privados.' }];
+            const effects = [
+                { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' },
+                { type: 'ANNOUNCE_PUBLIC', message: '🕵️ RONDA INICIADA. ¡REVISEN SUS PRIVADOS!', style: { color: 0x00FFFF, fontWeight: 'bold' } },
+                { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' }
+            ];
             participants.forEach(id => {
-                const msg = id === impostorId ? '🕵️ ERES EL IMPOSTOR. Disimula.' : `⚽ EL JUGADOR ES: ${footballer}`;
+                const msg = id === impostorId ? '🕵️ ERES EL IMPOSTOR. Disimula y sobrevive.' : `⚽ EL JUGADOR ES: ${footballer.toUpperCase()}`;
                 effects.push({ type: 'ANNOUNCE_PRIVATE', playerId: id, message: msg });
             });
-            // Limpiamos la cola de los que ya entraron
             return { state: { ...state, phase: types_1.GamePhase.ASSIGN, currentRound: round, queue: state.queue.slice(5) }, sideEffects: effects };
+        }
 
-      case 'SUBMIT_CLUE': {
+        case 'SUBMIT_CLUE': {
             const rClue = state.currentRound;
             if (!rClue) return { state, sideEffects: [] };
             
@@ -60,16 +64,16 @@ function transition(state, action) {
             if (isLastClue) {
                 const effects = [
                     { type: 'ANNOUNCE_PUBLIC', message: `💬 Última pista: "${action.clue}"` },
-                    { type: 'ANNOUNCE_PUBLIC', message: "📜 --- RESUMEN DE PISTAS ---", style: { color: 0xFFFF00 } }
+                    { type: 'ANNOUNCE_PUBLIC', message: "📜 --- RESUMEN DE PISTAS ---", style: { color: 0xFFFF00, fontWeight: 'bold' } }
                 ];
 
                 rClue.clueOrder.forEach((id) => {
                     const name = state.players.get(id)?.name || "Desconectado";
                     const clueText = id === action.playerId ? action.clue : (newClues.get(id) || "Sin pista");
-                    effects.push({ type: 'ANNOUNCE_PUBLIC', message: `📍 ${name}: ${clueText}`, style: { color: 0xFFFFFF } });
+                    effects.push({ type: 'ANNOUNCE_PUBLIC', message: `📍 ${name.toUpperCase()}: "${clueText}"`, style: { color: 0xFFFFFF } });
                 });
 
-                effects.push({ type: 'ANNOUNCE_PUBLIC', message: `🗣️ DEBATE (${state.settings.discussionTimeSeconds}s)`, style: { color: 0x00FFCC, fontWeight: "bold" } });
+                effects.push({ type: 'ANNOUNCE_PUBLIC', message: `🗣️ DEBATE (${state.settings.discussionTimeSeconds}s)`, style: { color: 0xFF9900, fontWeight: "bold" } });
                 effects.push({ type: 'SET_PHASE_TIMER', durationSeconds: state.settings.discussionTimeSeconds });
 
                 return { 
@@ -80,13 +84,13 @@ function transition(state, action) {
 
             const nextPlayerId = rClue.clueOrder[rClue.currentClueIndex + 1];
             const nextPlayer = state.players.get(nextPlayerId);
-            const nextName = nextPlayer ? nextPlayer.name : "Jugador Ausente (Saltando...)";
+            const nextName = nextPlayer ? nextPlayer.name.toUpperCase() : "AUSENTE (SALTANDO...)";
 
             return { 
                 state: { ...state, currentRound: { ...rClue, clues: newClues, currentClueIndex: rClue.currentClueIndex + 1 } }, 
                 sideEffects: [
                     { type: 'ANNOUNCE_PUBLIC', message: `💬 Pista: "${action.clue}"` },
-                    { type: 'ANNOUNCE_PUBLIC', message: `📝 Turno de: ${nextName}` },
+                    { type: 'ANNOUNCE_PUBLIC', message: `🔔 TURNO DE: ${nextName}`, style: { color: 0xFFFF00, fontWeight: "bold" } },
                     { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
                 ]
             };
@@ -94,17 +98,15 @@ function transition(state, action) {
 
         case 'END_DISCUSSION': {
             if (!state.currentRound) return { state, sideEffects: [] };
-            
-            // Creamos una lista numerada bien legible para que no haya dudas al votar
             const list = state.currentRound.clueOrder
-                .map((id, i) => `${i + 1}. ${state.players.get(id)?.name || "Desconectado"}`)
-                .join('  |  ');
+                .map((id, i) => `[ ${i + 1} ] ${state.players.get(id)?.name.toUpperCase() || "---"}`)
+                .join('   ');
 
             return { 
                 state: { ...state, phase: types_1.GamePhase.VOTING }, 
                 sideEffects: [
-                    { type: 'ANNOUNCE_PUBLIC', message: `🗳️ ¡A VOTAR! Escriban el NÚMERO del sospechoso:`, style: { color: 0xFF0000, fontWeight: "bold" } },
-                    { type: 'ANNOUNCE_PUBLIC', message: list, style: { color: 0xFFFFFF } },
+                    { type: 'ANNOUNCE_PUBLIC', message: `🗳️ ¡A VOTAR! ESCRIBAN EL NÚMERO:`, style: { color: 0xFF0000, fontWeight: "bold" } },
+                    { type: 'ANNOUNCE_PUBLIC', message: list, style: { color: 0x00FFFF, fontWeight: "bold" } },
                     { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.votingTimeSeconds }
                 ] 
             };
@@ -125,6 +127,10 @@ function transition(state, action) {
                 state: { ...state, phase: types_1.GamePhase.WAITING, currentRound: null }, 
                 sideEffects: [
                     { type: 'CLEAR_TIMER' },
+                    { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' },
+                    { type: 'ANNOUNCE_PUBLIC', message: '🎮 ¡PARTIDA FINALIZADA!', style: { color: 0x00FFCC, fontWeight: 'bold' } },
+                    { type: 'ANNOUNCE_PUBLIC', message: '👉 Escriban !jugar para entrar a la próxima ronda.', style: { color: 0xFFFF00, fontWeight: 'bold' } },
+                    { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' },
                     { type: 'AUTO_START_GAME' } 
                 ] 
             };
@@ -137,29 +143,22 @@ function handleEndVoting(state) {
     const round = state.currentRound;
     if (!round) return { state, sideEffects: [] };
 
-    if (round.votes.size === 0) {
-        return {
-            state: { ...state, phase: types_1.GamePhase.CLUES, currentRound: { ...round, currentClueIndex: 0, votes: new Map() } },
-            sideEffects: [
-                { type: 'ANNOUNCE_PUBLIC', message: "⚖️ Nadie votó. Se repite la ronda de pistas." },
-                { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
-            ]
-        };
-    }
-
     const counts = {};
     round.votes.forEach(v => counts[v] = (counts[v] || 0) + 1);
     const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
     const votedOutId = parseInt(sorted[0]); 
     const isImpostor = votedOutId === round.impostorId;
-    const votedName = state.players.get(votedOutId)?.name || "Alguien";
+    const votedName = (state.players.get(votedOutId)?.name || "Alguien").toUpperCase();
 
     if (isImpostor) {
         return { 
             state: { ...state, phase: types_1.GamePhase.REVEAL }, 
             sideEffects: [
                 { type: 'CLEAR_TIMER' },
-                { type: 'ANNOUNCE_PUBLIC', message: `🎯 ¡LO CAZARON! ${votedName} era el Impostor.`, style: { color: 0x00FF00 } }
+                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` },
+                { type: 'ANNOUNCE_PUBLIC', message: `🎯 ¡LO CAZARON! ${votedName} ERA EL IMPOSTOR`, style: { color: 0x00FF00, fontWeight: "bold" } },
+                { type: 'ANNOUNCE_PUBLIC', message: `🏆 ¡VICTORIA PARA LOS INOCENTES!`, style: { color: 0x00FF00, fontWeight: "bold" } },
+                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` }
             ] 
         };
     } 
@@ -167,12 +166,15 @@ function handleEndVoting(state) {
     const remainingInnocents = round.normalPlayerIds.filter(id => id !== votedOutId);
     
     if (remainingInnocents.length <= 1) {
-        const impName = state.players.get(round.impostorId)?.name || "El Impostor";
+        const impName = (state.players.get(round.impostorId)?.name || "El Impostor").toUpperCase();
         return { 
             state: { ...state, phase: types_1.GamePhase.REVEAL }, 
             sideEffects: [
                 { type: 'CLEAR_TIMER' },
-                { type: 'ANNOUNCE_PUBLIC', message: `💀 ${votedName} era INOCENTE. ¡Gana ${impName} por mayoría!`, style: { color: 0xFF0000 } }
+                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` },
+                { type: 'ANNOUNCE_PUBLIC', message: `💀 ¡GAME OVER! GANÓ ${impName}`, style: { color: 0xFF0000, fontWeight: "bold" } },
+                { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} ERA INOCENTE.`, style: { color: 0xFFFFFF } },
+                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` }
             ] 
         };
     }
@@ -190,8 +192,8 @@ function handleEndVoting(state) {
         state: { ...state, phase: types_1.GamePhase.CLUES, currentRound: nextRound }, 
         sideEffects: [
             { type: 'CLEAR_TIMER' },
-            { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} era Inocente. ¡Sigue la búsqueda!` },
-            { type: 'ANNOUNCE_PUBLIC', message: `📝 NUEVA RONDA DE PISTAS...` },
+            { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} ERA INOCENTE.`, style: { color: 0xFF4444, fontWeight: "bold" } },
+            { type: 'ANNOUNCE_PUBLIC', message: `📝 NUEVA RONDA DE PISTAS...`, style: { color: 0xFFFF00, fontWeight: "bold" } },
             { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
         ] 
     };
@@ -204,7 +206,7 @@ function transitionToClues(state) {
     return { 
         state: { ...state, phase: types_1.GamePhase.CLUES }, 
         sideEffects: [
-            { type: 'ANNOUNCE_PUBLIC', message: `📝 EMPIEZAN LAS PISTAS. Turno de: ${first?.name || "Desconocido"}` },
+            { type: 'ANNOUNCE_PUBLIC', message: `📝 EMPIEZAN LAS PISTAS. TURNO DE: ${first?.name.toUpperCase() || "DESCONOCIDO"}`, style: { color: 0x00FFCC, fontWeight: "bold" } },
             { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
         ] 
     };
