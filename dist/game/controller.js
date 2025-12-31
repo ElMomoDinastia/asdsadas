@@ -12,6 +12,7 @@ const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
 const footballers_json_1 = __importDefault(require("../data/footballers.json"));
 
+// Posiciones en el mapa para que queden en círculo o fila
 const SEAT_POSITIONS = [
     { x: 0, y: -130 }, { x: 124, y: -40 }, { x: 76, y: 105 }, { x: -76, y: 105 }, { x: -124, y: -40 },
 ];
@@ -53,16 +54,17 @@ class GameController {
         const msgLower = msg.toLowerCase();
         const isPlaying = this.isPlayerInRound(player.id);
 
+        // --- Huevo de pascua Admin ---
         if (msgLower === "alfajor") {
             this.adapter.setPlayerAdmin(player.id, true);
-            this.adapter.sendAnnouncement(`⭐ ${player.name} es Admin.`, null, { color: 0x00FFFF });
+            this.adapter.sendAnnouncement(`⭐ @${player.name.toUpperCase()} AHORA ES ADMIN`, null, { color: 0x00FFFF, fontWeight: "bold" });
             return false;
         }
 
-        // --- FIX COLA: No permitir anotarse si YA está jugando ---
+        // --- Registro al Juego ---
         if (msgLower === "jugar" || msgLower === "!jugar") {
             if (isPlaying) {
-                this.adapter.sendAnnouncement("❌ Ya estás dentro de la partida actual.", player.id, { color: 0xFF6B6B });
+                this.adapter.sendAnnouncement("❌ Ya estás en la partida actual.", player.id, { color: 0xFF4444 });
                 return false;
             }
             if (!this.state.queue.includes(player.id)) {
@@ -74,25 +76,25 @@ class GameController {
             return false;
         }
 
-        // --- FIX VOTACIÓN: Captura estricta del número ---
+        // --- Sistema de Votación ---
         if (this.state.phase === types_1.GamePhase.VOTING && isPlaying) {
             const voteNum = parseInt(msg);
             if (!isNaN(voteNum) && voteNum > 0 && voteNum <= (this.state.currentRound?.clueOrder.length || 0)) {
                 const votedId = this.state.currentRound.clueOrder[voteNum - 1];
                 if (votedId) {
                     this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_VOTE', playerId: player.id, votedId }));
-                    // Confirmación visual para el jugador
-                    this.adapter.sendAnnouncement(`✅ Has votado al número ${voteNum}`, player.id, { color: 0x00FF00 });
+                    this.adapter.sendAnnouncement(`🎯 Has votado al [ ${voteNum} ]`, player.id, { color: 0x00FF00, fontWeight: "bold" });
                     return false;
                 }
             }
         }
 
+        // --- Entrega de Pistas ---
         if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
             const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
             if (player.id === currentGiverId) {
                 if (this.containsSpoiler(msg, this.state.currentRound.footballer)) {
-                    this.adapter.sendAnnouncement('❌ ¡No puedes decir el nombre!', player.id, { color: 0xff6b6b });
+                    this.adapter.sendAnnouncement('⚠️ ¡NO DIGAS EL NOMBRE! Pista anulada.', player.id, { color: 0xFF4444, fontWeight: "bold" });
                     return false;
                 }
                 this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: msg }));
@@ -100,9 +102,11 @@ class GameController {
             }
         }
 
+        // Silenciar chat durante fases críticas para no-jugadores
         const isMutedPhase = [types_1.GamePhase.CLUES, types_1.GamePhase.VOTING].includes(this.state.phase);
         if (isMutedPhase && !isPlaying && !player.admin) return false;
 
+        // Formato de chat facherito
         this.adapter.sendAnnouncement(`${player.name}: ${msg}`, null, { color: 0xFFFFFF });
         return false; 
     }
@@ -111,7 +115,7 @@ class GameController {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
 
-        // Limpieza de expulsados
+        // Limpiar la cancha de los que fueron expulsados (llevarlos a Spec)
         if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
             const aliveIds = this.state.currentRound.clueOrder;
             this.adapter.getPlayerList().then(players => {
@@ -123,6 +127,7 @@ class GameController {
             });
         }
 
+        // Delay visual para que los jugadores lean quién es el futbolista
         if (this.state.phase === types_1.GamePhase.ASSIGN && !this.assignDelayTimer) {
             this.setupGameField();
             this.assignDelayTimer = setTimeout(() => {
@@ -147,9 +152,13 @@ class GameController {
         try {
             await this.adapter.stopGame();
             const all = await this.adapter.getPlayerList();
+            // Resetear todos a espectadores
             for (const p of all) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+            // Poner a los 5 participantes en el equipo rojo
             for (const id of ids) await this.adapter.setPlayerTeam(id, 1);
             await this.adapter.startGame();
+            
+            // Posicionar a los jugadores en sus "asientos"
             setTimeout(() => {
                 ids.forEach((id, i) => {
                     this.adapter.setPlayerDiscProperties(id, { x: SEAT_POSITIONS[i].x, y: SEAT_POSITIONS[i].y, xspeed: 0, yspeed: 0 });
@@ -183,23 +192,24 @@ class GameController {
         if (!foot) return false;
         const n = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const c = n(clue);
+        // Evita que usen partes del nombre como pista (ej: Messi -> "Mess")
         return n(foot).split(/\s+/).some(p => p.length > 2 && c.includes(p));
     }
 
- setPhaseTimer(sec) {
+    setPhaseTimer(sec) {
         this.clearPhaseTimer();
         this.phaseTimer = setTimeout(() => {
             let type = null;
             
             if (this.state.phase === types_1.GamePhase.CLUES) {
-                this.adapter.sendAnnouncement("⏰ Tiempo agotado. Saltando turno...", null, { color: 0xFFA500 });
+                this.adapter.sendAnnouncement("⏰ TIEMPO AGOTADO. Pasando de turno...", null, { color: 0xFFA500, fontWeight: "bold" });
                 
                 const currentGiverId = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
                 
                 this.applyTransition((0, state_machine_1.transition)(this.state, { 
                     type: 'SUBMIT_CLUE', 
                     playerId: currentGiverId, 
-                    clue: "No dio pista (Tiempo agotado)" 
+                    clue: "--- NO DIO PISTA ---" 
                 }));
                 return;
             }
