@@ -99,12 +99,11 @@ function handleJoinQueue(state, playerId) {
     const player = state.players.get(playerId);
     if (!player) return { state, sideEffects: [] };
 
-    // Si ya está en la cola, no hacer nada
+    // 1. Validaciones de estado
     if (state.queue.includes(playerId)) {
         return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '✅ Ya estás anotado para la siguiente.' }] };
     }
 
-    // Si está jugando la ronda actual, no puede anotarse en la cola todavía
     if (state.currentRound && (state.currentRound.normalPlayerIds.includes(playerId) || state.currentRound.impostorId === playerId)) {
         return { state, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '🎮 Ya estás jugando esta ronda.' }] };
     }
@@ -112,7 +111,7 @@ function handleJoinQueue(state, playerId) {
     const newQueue = [...state.queue, playerId];
     const sideEffects = [];
 
-    // SI EL JUEGO ESTÁ ESPERANDO: Mostrar conteo público (5/5)
+    // 2. Lógica según fase del juego
     if (state.phase === types_1.GamePhase.WAITING) {
         const remaining = state.settings.minPlayers - newQueue.length;
         if (remaining > 0) {
@@ -129,9 +128,7 @@ function handleJoinQueue(state, playerId) {
             });
             sideEffects.push({ type: 'AUTO_START_GAME' });
         }
-    } 
-    // SI EL JUEGO YA EMPEZÓ: Confirmación privada para no molestar el chat
-    else {
+    } else {
         sideEffects.push({
             type: 'ANNOUNCE_PRIVATE',
             playerId,
@@ -141,26 +138,7 @@ function handleJoinQueue(state, playerId) {
 
     return { state: { ...state, queue: newQueue }, sideEffects };
 }
-    const newQueue = [...state.queue, playerId];
-    const remaining = state.settings.minPlayers - newQueue.length;
-    const sideEffects = [];
-    if (remaining > 0) {
-        sideEffects.push({
-            type: 'ANNOUNCE_PUBLIC',
-            message: `✅ ${player.name} listo (${newQueue.length}/5) - faltan ${remaining}`,
-            style: { color: 0x00ff00 },
-        });
-    }
-    else {
-        sideEffects.push({
-            type: 'ANNOUNCE_PUBLIC',
-            message: `✅ ${player.name} listo | 🎮 ¡5/5 JUGADORES! Empieza en 3s...`,
-            style: { color: 0x00ff00, sound: 1 },
-        });
-        sideEffects.push({ type: 'AUTO_START_GAME' });
-    }
-    return { state: { ...state, queue: newQueue }, sideEffects };
-}
+
 function handleLeaveQueue(state, playerId) {
     if (!state.queue.includes(playerId))
         return { state, sideEffects: [] };
@@ -171,6 +149,7 @@ function handleLeaveQueue(state, playerId) {
         sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `👋 ${player?.name ?? '?'} salió (${newQueue.length}/5)` }],
     };
 }
+
 function handleStartGame(state, footballers) {
     if (state.phase !== types_1.GamePhase.WAITING)
         return { state, sideEffects: [] };
