@@ -8,274 +8,305 @@ exports.canPlayerAct = canPlayerAct;
 exports.getCurrentActor = getCurrentActor;
 exports.getPhaseDescription = getPhaseDescription;
 
-const types_1 = require("./types");
+const { GamePhase } = require("./types");
+
+/* =========================
+   STATE INIT
+========================= */
 
 function createInitialState(settings) {
-    return {
-        phase: types_1.GamePhase.WAITING,
-        players: new Map(),
-        queue: [],
-        currentRound: null,
-        roundHistory: [],
-        settings: settings || {
-            minPlayers: 5,
-            clueTimeSeconds: 30,
-            discussionTimeSeconds: 30,
-            votingTimeSeconds: 45
-        }
-    };
+  return {
+    phase: GamePhase.WAITING,
+    players: new Map(),
+    queue: [],
+    currentRound: null,
+    roundHistory: [],
+    settings: settings || {
+      minPlayers: 5,
+      clueTimeSeconds: 30,
+      discussionTimeSeconds: 30,
+      votingTimeSeconds: 45,
+    },
+  };
 }
+
+/* =========================
+   HELPERS
+========================= */
 
 function generateRoundId() {
-    return `round_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  return `round_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function shuffle(array) {
-    const result = [...array];
-    for (let i = result.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
+
+function getRoundPlayers(round) {
+  if (!round) return [];
+  return [round.impostorId, ...round.normalPlayerIds];
+}
+
+/* =========================
+   TRANSITION ROUTER
+========================= */
 
 function transition(state, action) {
-    switch (action.type) {
-        case 'PLAYER_JOIN': return handlePlayerJoin(state, action.player);
-        case 'PLAYER_LEAVE': return handlePlayerLeave(state, action.playerId);
-        case 'JOIN_QUEUE': return handleJoinQueue(state, action.playerId);
-        case 'LEAVE_QUEUE': return handleLeaveQueue(state, action.playerId);
-        case 'START_GAME': return handleStartGame(state, action.footballers);
-        case 'SUBMIT_CLUE': return handleSubmitClue(state, action.playerId, action.clue);
-        case 'CLUE_TIMEOUT': return handleClueTimeout(state);
-        case 'END_DISCUSSION': return handleEndDiscussion(state);
-        case 'SUBMIT_VOTE': return handleSubmitVote(state, action.playerId, action.votedId);
-        case 'END_VOTING': return handleEndVoting(state);
-        case 'RESET_GAME': return handleResetGame(state);
-        default: return { state, sideEffects: [] };
-    }
+  switch (action.type) {
+    case "PLAYER_JOIN": return handlePlayerJoin(state, action.player);
+    case "PLAYER_LEAVE": return handlePlayerLeave(state, action.playerId);
+    case "JOIN_QUEUE": return handleJoinQueue(state, action.playerId);
+    case "LEAVE_QUEUE": return handleLeaveQueue(state, action.playerId);
+    case "START_GAME": return handleStartGame(state, action.footballers);
+    case "SUBMIT_CLUE": return handleSubmitClue(state, action.playerId, action.clue);
+    case "CLUE_TIMEOUT": return handleClueTimeout(state);
+    case "END_DISCUSSION": return handleEndDiscussion(state);
+    case "SUBMIT_VOTE": return handleSubmitVote(state, action.playerId, action.votedId);
+    case "END_VOTING": return handleEndVoting(state);
+    case "RESET_GAME": return handleResetGame(state);
+    default: return { state, sideEffects: [] };
+  }
 }
 
+/* =========================
+   PLAYER HANDLING
+========================= */
+
 function handlePlayerJoin(state, player) {
-    const newPlayers = new Map(state.players);
-    newPlayers.set(player.id, player);
-    const cleanQueue = state.queue.filter(id => newPlayers.has(id));
-    
-    return { 
-        state: { ...state, players: newPlayers, queue: cleanQueue }, 
-        sideEffects: [{
-            type: 'ANNOUNCE_PRIVATE',
-            playerId: player.id,
-            message: `🔴 EL IMPOSTOR | Escribe "jugar" para unirte`,
-        }] 
-    };
+  const players = new Map(state.players);
+  players.set(player.id, player);
+
+  return {
+    state: { ...state, players },
+    sideEffects: [{
+      type: "ANNOUNCE_PRIVATE",
+      playerId: player.id,
+      message: `🔴 EL IMPOSTOR | Escribe "jugar" para unirte`,
+    }],
+  };
 }
 
 function handlePlayerLeave(state, playerId) {
-    const newPlayers = new Map(state.players);
-    newPlayers.delete(playerId);
-    const newQueue = state.queue.filter((id) => id !== playerId);
-    let newState = { ...state, players: newPlayers, queue: newQueue };
-    const sideEffects = [];
+  const players = new Map(state.players);
+  players.delete(playerId);
 
-    if (state.currentRound) {
-        const roundPlayerIds = [state.currentRound.impostorId, ...state.currentRound.normalPlayerIds];
-        if (roundPlayerIds.includes(playerId)) {
-            const remaining = roundPlayerIds.filter((id) => id !== playerId && newPlayers.has(id));
-            if (remaining.length < 3) {
-                sideEffects.push({
-                    type: 'ANNOUNCE_PUBLIC',
-                    message: '⚠️ Ronda cancelada - Un jugador abandonó',
-                    style: { color: 0xff6b6b, sound: 2 },
-                });
-                newState = { ...newState, phase: types_1.GamePhase.WAITING, currentRound: null };
-                sideEffects.push({ type: 'CLEAR_TIMER' });
-            }
-        }
+  const queue = state.queue.filter(id => id !== playerId);
+  let newState = { ...state, players, queue };
+  const sideEffects = [];
+
+  if (state.currentRound) {
+    const active = getRoundPlayers(state.currentRound).filter(id => players.has(id));
+    if (active.length < 3) {
+      sideEffects.push({
+        type: "ANNOUNCE_PUBLIC",
+        message: "⚠️ Ronda cancelada - faltan jugadores",
+        style: { color: 0xff6b6b, sound: 2 },
+      });
+      sideEffects.push({ type: "CLEAR_TIMER" });
+      newState = { ...newState, phase: GamePhase.WAITING, currentRound: null };
     }
-    return { state: newState, sideEffects };
+  }
+
+  return { state: newState, sideEffects };
 }
 
+/* =========================
+   QUEUE
+========================= */
+
 function handleJoinQueue(state, playerId) {
-    const player = state.players.get(playerId);
-    if (!player) return { state, sideEffects: [] };
+  if (!state.players.has(playerId)) return { state, sideEffects: [] };
 
-    const cleanQueue = state.queue.filter(id => state.players.has(id));
-    if (cleanQueue.includes(playerId)) {
-        return { state: { ...state, queue: cleanQueue }, sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId, message: '✅ Ya estás en la cola.' }] };
-    }
+  if (state.queue.includes(playerId)) {
+    return {
+      state,
+      sideEffects: [{ type: "ANNOUNCE_PRIVATE", playerId, message: "✅ Ya estás en la cola." }],
+    };
+  }
 
-    const newQueue = [...cleanQueue, playerId];
-    const sideEffects = [];
+  const queue = [...state.queue, playerId];
+  const remaining = state.settings.minPlayers - queue.length;
 
-    if (state.phase === types_1.GamePhase.WAITING) {
-        const remaining = state.settings.minPlayers - newQueue.length;
-        if (remaining > 0) {
-            sideEffects.push({
-                type: 'ANNOUNCE_PUBLIC',
-                message: `✅ ${player.name} listo (${newQueue.length}/5) - faltan ${remaining}`,
-                style: { color: 0x00ff00 },
-            });
-        } else {
-            sideEffects.push({
-                type: 'ANNOUNCE_PUBLIC',
-                message: `✅ ${player.name} listo | 🎮 ¡5/5! Iniciando...`,
-                style: { color: 0x00ff00, sound: 1 },
-            });
-            sideEffects.push({ type: 'AUTO_START_GAME' });
-        }
-    }
-    return { state: { ...state, queue: newQueue }, sideEffects };
+  const sideEffects = [{
+    type: "ANNOUNCE_PUBLIC",
+    message: remaining > 0
+      ? `✅ Listos (${queue.length}/5) - faltan ${remaining}`
+      : `🎮 5/5 ¡Iniciando!`,
+    style: { color: 0x00ff00, sound: remaining <= 0 ? 1 : 0 },
+  }];
+
+  if (remaining <= 0) sideEffects.push({ type: "AUTO_START_GAME" });
+
+  return { state: { ...state, queue }, sideEffects };
 }
 
 function handleLeaveQueue(state, playerId) {
-    const newQueue = state.queue.filter((id) => id !== playerId);
-    return { state: { ...state, queue: newQueue }, sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `👋 Alguien salió de la cola.` }] };
+  return {
+    state: { ...state, queue: state.queue.filter(id => id !== playerId) },
+    sideEffects: [{ type: "ANNOUNCE_PUBLIC", message: "👋 Alguien salió de la cola." }],
+  };
 }
 
+/* =========================
+   GAME FLOW
+========================= */
+
 function handleStartGame(state, footballers) {
-    if (state.phase !== types_1.GamePhase.WAITING) return { state, sideEffects: [] };
-    
-    const realQueue = state.queue.filter(id => state.players.has(id));
-    if (realQueue.length < 5) return { state: { ...state, queue: realQueue }, sideEffects: [] };
+  if (state.phase !== GamePhase.WAITING) return { state, sideEffects: [] };
 
-    const roundPlayers = shuffle(realQueue).slice(0, 5);
-    const impostorId = roundPlayers[Math.floor(Math.random() * roundPlayers.length)];
-    const normalPlayerIds = roundPlayers.filter((id) => id !== impostorId);
-    const footballer = footballers[Math.floor(Math.random() * footballers.length)];
-    const clueOrder = shuffle([...roundPlayers]);
-    
-    const round = {
-        id: generateRoundId(),
-        footballer,
-        impostorId,
-        normalPlayerIds,
-        clues: new Map(),
-        votes: new Map(),
-        clueOrder,
-        currentClueIndex: 0,
-        phaseDeadline: null,
-        startedAt: Date.now(),
-    };
+  const players = shuffle(state.queue).slice(0, 5);
+  if (players.length < 5) return { state, sideEffects: [] };
 
-    const sideEffects = [
-        { type: 'ANNOUNCE_PUBLIC', message: `🔴 RONDA INICIADA`, style: { color: 0xff0000, style: 'bold', sound: 2 } },
-    ];
+  const impostorId = players[Math.floor(Math.random() * players.length)];
+  const normalPlayerIds = players.filter(id => id !== impostorId);
+  const footballer = footballers[Math.floor(Math.random() * footballers.length)];
 
-    for (const pid of roundPlayers) {
-        if (pid === impostorId) {
-            sideEffects.push({ type: 'ANNOUNCE_PRIVATE', playerId: pid, message: `🕵️ ERES EL IMPOSTOR - ¡Engaña a todos para ganar!` });
-        } else {
-            sideEffects.push({ type: 'ANNOUNCE_PRIVATE', playerId: pid, message: `⚽ FUTBOLISTA: ${footballer} - ¡No digas el nombre!` });
-        }
-    }
+  const round = {
+    id: generateRoundId(),
+    footballer,
+    impostorId,
+    normalPlayerIds,
+    clueOrder: shuffle(players),
+    currentClueIndex: 0,
+    votes: new Map(),
+    startedAt: Date.now(),
+  };
 
-    return { state: { ...state, phase: types_1.GamePhase.ASSIGN, currentRound: round, queue: [] }, sideEffects };
+  const sideEffects = [{ type: "ANNOUNCE_PUBLIC", message: "🔴 RONDA INICIADA", style: { color: 0xff0000, sound: 2 } }];
+
+  for (const id of players) {
+    sideEffects.push({
+      type: "ANNOUNCE_PRIVATE",
+      playerId: id,
+      message: id === impostorId
+        ? "🕵️ ERES EL IMPOSTOR"
+        : `⚽ FUTBOLISTA: ${footballer}`,
+    });
+  }
+
+  return { state: { ...state, phase: GamePhase.ASSIGN, currentRound: round, queue: [] }, sideEffects };
 }
 
 function transitionToClues(state) {
-    if (state.phase !== types_1.GamePhase.ASSIGN || !state.currentRound) return { state, sideEffects: [] };
-    const firstId = state.currentRound.clueOrder[0];
-    const first = state.players.get(firstId);
-    return {
-        state: { ...state, phase: types_1.GamePhase.CLUES },
-        sideEffects: [
-            { type: 'ANNOUNCE_PUBLIC', message: `📝 PISTAS | Turno: ${first?.name ?? '?'}`, style: { color: 0x00bfff, style: 'bold', sound: 1 } },
-            { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds },
-        ],
-    };
+  if (!state.currentRound) return { state, sideEffects: [] };
+  const id = state.currentRound.clueOrder[0];
+  return {
+    state: { ...state, phase: GamePhase.CLUES },
+    sideEffects: [
+      { type: "ANNOUNCE_PUBLIC", message: `📝 Turno: ${state.players.get(id)?.name ?? "?"}` },
+      { type: "SET_PHASE_TIMER", durationSeconds: state.settings.clueTimeSeconds },
+    ],
+  };
 }
 
+/* =========================
+   CLUES / DISCUSSION / VOTE
+========================= */
+
 function handleSubmitClue(state, playerId, clue) {
-    if (state.phase !== types_1.GamePhase.CLUES || !state.currentRound) return { state, sideEffects: [] };
-    const round = state.currentRound;
-    const expectedId = round.clueOrder[round.currentClueIndex];
-    if (playerId !== expectedId) return { state, sideEffects: [] };
+  const r = state.currentRound;
+  if (!r || state.phase !== GamePhase.CLUES) return { state, sideEffects: [] };
 
-    const newRound = { ...round, currentClueIndex: round.currentClueIndex + 1 };
-    const player = state.players.get(playerId);
-    const sideEffects = [{ type: 'ANNOUNCE_PUBLIC', message: `💬 ${player?.name}: "${clue}"` }];
+  if (r.clueOrder[r.currentClueIndex] !== playerId) return { state, sideEffects: [] };
 
-    if (newRound.currentClueIndex >= round.clueOrder.length) {
-        sideEffects.push({ type: 'ANNOUNCE_PUBLIC', message: `🗣️ DEBATE | ¡Comiencen a discutir!`, style: { color: 0xffa500, style: 'bold', sound: 1 } });
-        sideEffects.push({ type: 'SET_PHASE_TIMER', durationSeconds: state.settings.discussionTimeSeconds });
-        return { state: { ...state, phase: types_1.GamePhase.DISCUSSION, currentRound: newRound }, sideEffects };
-    }
+  const nextIndex = r.currentClueIndex + 1;
+  const nextRound = { ...r, currentClueIndex: nextIndex };
 
-    const nextId = round.clueOrder[newRound.currentClueIndex];
-    const next = state.players.get(nextId);
-    sideEffects.push({ type: 'ANNOUNCE_PUBLIC', message: `📝 Turno: ${next?.name ?? '?'}` });
-    sideEffects.push({ type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds });
-    return { state: { ...state, currentRound: newRound }, sideEffects };
+  if (nextIndex >= r.clueOrder.length) {
+    return {
+      state: { ...state, phase: GamePhase.DISCUSSION, currentRound: nextRound },
+      sideEffects: [
+        { type: "ANNOUNCE_PUBLIC", message: "🗣️ DEBATE", style: { sound: 1 } },
+        { type: "SET_PHASE_TIMER", durationSeconds: state.settings.discussionTimeSeconds },
+      ],
+    };
+  }
+
+  return {
+    state: { ...state, currentRound: nextRound },
+    sideEffects: [{ type: "SET_PHASE_TIMER", durationSeconds: state.settings.clueTimeSeconds }],
+  };
 }
 
 function handleClueTimeout(state) {
-    if (state.phase !== types_1.GamePhase.CLUES || !state.currentRound) return { state, sideEffects: [] };
-    return handleSubmitClue(state, state.currentRound.clueOrder[state.currentRound.currentClueIndex], "...");
+  const r = state.currentRound;
+  if (!r) return { state, sideEffects: [] };
+  return handleSubmitClue(state, r.clueOrder[r.currentClueIndex], "...");
 }
 
 function handleEndDiscussion(state) {
-    if (state.phase !== types_1.GamePhase.DISCUSSION || !state.currentRound) return { state, sideEffects: [] };
-    
-    // GENERACIÓN AUTOMÁTICA DEL MENÚ DE VOTACIÓN
-    let menu = "🗳️ VOTACIÓN | Escribe el número del sospechoso:\n";
-    state.currentRound.clueOrder.forEach((id) => {
-        const p = state.players.get(id);
-        if (p) menu += `[${p.id}] ${p.name}\n`;
-    });
+  const r = state.currentRound;
+  if (!r) return { state, sideEffects: [] };
 
-    return {
-        state: { ...state, phase: types_1.GamePhase.VOTING },
-        sideEffects: [
-            { type: 'ANNOUNCE_PUBLIC', message: menu, style: { color: 0xff69b4, style: 'bold', sound: 2 } },
-            { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.votingTimeSeconds },
-        ],
-    };
+  let menu = "🗳️ VOTACIÓN:\n";
+  r.clueOrder.forEach(id => {
+    const p = state.players.get(id);
+    if (p) menu += `[${id}] ${p.name}\n`;
+  });
+
+  return {
+    state: { ...state, phase: GamePhase.VOTING },
+    sideEffects: [
+      { type: "ANNOUNCE_PUBLIC", message: menu, style: { sound: 2 } },
+      { type: "SET_PHASE_TIMER", durationSeconds: state.settings.votingTimeSeconds },
+    ],
+  };
 }
 
 function handleSubmitVote(state, playerId, votedId) {
-    if (state.phase !== types_1.GamePhase.VOTING || !state.currentRound) return { state, sideEffects: [] };
-    const round = state.currentRound;
-    
-    const newVotes = new Map(round.votes);
-    newVotes.set(playerId, votedId);
-    const voter = state.players.get(playerId);
-    const newRound = { ...round, votes: newVotes };
+  const r = state.currentRound;
+  if (!r || state.phase !== GamePhase.VOTING) return { state, sideEffects: [] };
 
-    const sideEffects = [{ type: 'ANNOUNCE_PUBLIC', message: `🗳️ ${voter?.name} votó (${newVotes.size}/5)` }];
-    if (newVotes.size >= 5) return handleEndVoting({ ...state, currentRound: newRound });
-    return { state: { ...state, currentRound: newRound }, sideEffects };
+  const votes = new Map(r.votes);
+  votes.set(playerId, votedId);
+
+  const sideEffects = [{ type: "ANNOUNCE_PUBLIC", message: `🗳️ Votos: ${votes.size}/5` }];
+  if (votes.size >= 5) return handleEndVoting({ ...state, currentRound: { ...r, votes } });
+
+  return { state: { ...state, currentRound: { ...r, votes } }, sideEffects };
 }
 
 function handleEndVoting(state) {
-    if (state.phase !== types_1.GamePhase.VOTING || !state.currentRound) return { state, sideEffects: [] };
-    const round = state.currentRound;
-    const counts = {};
-    round.votes.forEach(v => counts[v] = (counts[v] || 0) + 1);
+  const r = state.currentRound;
+  if (!r) return { state, sideEffects: [] };
 
-    const votedOutId = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b, round.clueOrder[0]);
-    const wasImpostor = parseInt(votedOutId) === round.impostorId;
-    const votedName = state.players.get(parseInt(votedOutId))?.name || "Desconocido";
+  const count = {};
+  r.votes.forEach(v => count[v] = (count[v] || 0) + 1);
+  const votedId = Number(Object.keys(count).sort((a, b) => count[b] - count[a])[0]);
 
-    const sideEffects = [{ type: 'CLEAR_TIMER' }];
-    if (wasImpostor) {
-        sideEffects.push({ type: 'ANNOUNCE_PUBLIC', message: `🎯 ¡VICTORIA! ${votedName} era el Impostor`, style: { color: 0x00ff00, style: 'bold', sound: 2 } });
-    } else {
-        sideEffects.push({ type: 'ANNOUNCE_PUBLIC', message: `💀 DERROTA | ${votedName} era Inocente. ¡Gana el Impostor!`, style: { color: 0xff0000, style: 'bold', sound: 2 } });
-    }
-    
-    sideEffects.push({ type: 'ANNOUNCE_PUBLIC', message: `⚽ El futbolista era: ${round.footballer}` });
-    return { state: { ...state, phase: types_1.GamePhase.RESULTS }, sideEffects };
+  const impostorDead = votedId === r.impostorId;
+  const name = state.players.get(votedId)?.name ?? "¿?";
+
+  return {
+    state: { ...state, phase: GamePhase.RESULTS },
+    sideEffects: [
+      { type: "CLEAR_TIMER" },
+      {
+        type: "ANNOUNCE_PUBLIC",
+        message: impostorDead
+          ? `🎯 ¡GANARON! ${name} era el impostor`
+          : `💀 PERDIERON | ${name} era inocente`,
+        style: { sound: 2 },
+      },
+      { type: "ANNOUNCE_PUBLIC", message: `⚽ Futbolista: ${r.footballer}` },
+    ],
+  };
 }
 
 function handleResetGame(state) {
-    return { state: { ...state, phase: types_1.GamePhase.WAITING, currentRound: null, queue: [] }, sideEffects: [] };
+  return { state: { ...state, phase: GamePhase.WAITING, currentRound: null, queue: [] }, sideEffects: [] };
 }
 
-function canPlayerAct(state, playerId, action) { return true; }
-function getCurrentActor(state) { return null; }
+/* =========================
+   DUMMIES (OK)
+========================= */
+
+function canPlayerAct() { return true; }
+function getCurrentActor() { return null; }
 function getPhaseDescription(phase) { return phase; }
-function handleEndReveal(state) { return handleResetGame(state); }
-function handleForceReveal(state) { return handleEndVoting(state); }
-function handleSkipPhase(state) { return { state, sideEffects: [] }; }
-function handleResetRound(state) { return handleResetGame(state); }
+
