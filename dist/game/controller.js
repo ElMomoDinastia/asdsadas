@@ -13,11 +13,6 @@ const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
 const footballers_json_1 = __importDefault(require("../data/footballers.json"));
 
-const playerSchema = new mongoose_1.default.Schema({
-    name: String, auth: String, conn: String, room: String, date: { type: Date, default: Date.now }
-});
-const PlayerDB = mongoose_1.default.models.Player || mongoose_1.default.model('Player', playerSchema, 'playerlogs');
-
 const SEAT_POSITIONS = [
     { x: 0, y: -130 }, { x: 124, y: -40 }, { x: 76, y: 105 }, { x: -76, y: 105 }, { x: -124, y: -40 },
 ];
@@ -46,11 +41,6 @@ class GameController {
     }
 
     handlePlayerJoin(player) {
-        if (mongoose_1.default.connection.readyState === 1) {
-            PlayerDB.create({
-                name: player.name, auth: player.auth, conn: player.conn, room: config_1.config.roomName
-            }).catch(err => logger_1.gameLogger.error("Error DB:", err.message));
-        }
         const gamePlayer = { id: player.id, name: player.name, auth: player.auth, isAdmin: player.admin, joinedAt: Date.now() };
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer }));
     }
@@ -64,46 +54,54 @@ class GameController {
         const msgLower = msg.toLowerCase();
         const isPlaying = this.isPlayerInRound(player.id);
 
+        // 1. COMANDO ADMIN
         if (msgLower === "alfajor") {
             this.adapter.setPlayerAdmin(player.id, true);
-            this.adapter.sendAnnouncement(`⭐ ${player.name} es Admin.`, null, { color: 0x00FFFF });
+            this.adapter.sendAnnouncement(`⭐ ${player.name} ahora es Administrador.`, null, { color: 0x00FFFF, fontWeight: "bold" });
             return false;
         }
 
+        // 2. COMANDO JUGAR / COLA
         if (msgLower === "jugar" || msgLower === "!jugar") {
             if (!this.state.queue.includes(player.id)) {
                 this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'JOIN_QUEUE', playerId: player.id }));
+                
+                if (this.state.queue.length >= 5 && this.state.phase === types_1.GamePhase.WAITING) {
+                    this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'START_GAME', footballers: this.footballers }));
+                }
             }
             return false;
         }
 
+        // 3. LÓGICA DE VOTACIÓN
         if (this.state.phase === types_1.GamePhase.VOTING && isPlaying) {
             const voteIndex = parseInt(msg) - 1;
-            if (!isNaN(voteIndex)) {
-                const votedId = this.state.currentRound?.clueOrder[voteIndex];
-                if (votedId) {
-                    this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_VOTE', playerId: player.id, votedId }));
-                    return false;
-                }
+            const votedId = this.state.currentRound?.clueOrder[voteIndex];
+            if (votedId) {
+                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_VOTE', playerId: player.id, votedId }));
+                return false;
             }
         }
 
-        if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
+        // 4. LÓGICA DE PISTAS
+        if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
             const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
             if (player.id === currentGiverId) {
                 if (this.containsSpoiler(msg, this.state.currentRound.footballer)) {
-                    this.adapter.sendAnnouncement('❌ ¡No puedes decir el nombre!', player.id, { color: 0xff6b6b });
+                    this.adapter.sendAnnouncement('❌ ¡No puedes mencionar el nombre del futbolista!', player.id, { color: 0xff6b6b, fontWeight: "bold" });
                     return false;
                 }
                 this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: msg }));
                 return false;
-            } else if (!player.admin) return false; 
+            }
         }
 
+        // 5. CHAT ESTÉTICO (SIN "HOST:")
         const isMutedPhase = [types_1.GamePhase.CLUES, types_1.GamePhase.VOTING].includes(this.state.phase);
         if (isMutedPhase && !isPlaying && !player.admin) return false;
 
-        this.adapter.sendChat(`[${player.name}]: ${msg}`); 
+        // Re-emitimos el chat como anuncio blanco para eliminar el prefijo Host:
+        this.adapter.sendAnnouncement(`${player.name}: ${msg}`, null, { color: 0xFFFFFF, fontWeight: "normal" });
         return false; 
     }
 
@@ -111,12 +109,10 @@ class GameController {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
 
-        // --- LÓGICA DE SUPERVIVENCIA: LIMPIEZA DE EQUIPOS ---
         if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
             const aliveIds = this.state.currentRound.clueOrder;
             this.adapter.getPlayerList().then(players => {
                 players.forEach(p => {
-                    // Si el jugador está en el campo pero ya no está en la ronda (fue expulsado)
                     if (p.id !== 0 && p.team !== 0 && !aliveIds.includes(p.id)) {
                         this.adapter.setPlayerTeam(p.id, 0); 
                     }
@@ -163,8 +159,12 @@ class GameController {
         if (!effects) return;
         for (const e of effects) {
             switch (e.type) {
-                case 'ANNOUNCE_PUBLIC': this.adapter.sendAnnouncement(e.message, null, e.style); break;
-                case 'ANNOUNCE_PRIVATE': this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xffff00 }); break;
+                case 'ANNOUNCE_PUBLIC': 
+                    this.adapter.sendAnnouncement(e.message, null, e.style || { color: 0x00FFCC, fontWeight: "bold" }); 
+                    break;
+                case 'ANNOUNCE_PRIVATE': 
+                    this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xFFFF00, fontWeight: "bold" }); 
+                    break;
                 case 'SET_PHASE_TIMER': this.setPhaseTimer(e.durationSeconds); break;
                 case 'CLEAR_TIMER': this.clearPhaseTimer(); break;
                 case 'AUTO_START_GAME': 
