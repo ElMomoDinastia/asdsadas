@@ -1,57 +1,4 @@
 "use strict";
-/**
- * Pure State Machine - CLEAN & HORIZONTAL MESSAGES
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createInitialState = createInitialState;
-exports.transition = transition;
-exports.transitionToClues = transitionToClues;
-exports.canPlayerAct = canPlayerAct;
-exports.getCurrentActor = getCurrentActor;
-exports.getPhaseDescription = getPhaseDescription;
-
-const types_1 = require("./types");
-
-/**
- * Inicializa el estado del juego
- */
-function createInitialState(settings) {
-    return {
-        phase: types_1.GamePhase.WAITING,
-        players: new Map(),
-        queue: [],
-        currentRound: null,
-        roundHistory: [],
-        settings: settings || {
-            minPlayers: 5,
-            clueTimeSeconds: 30,
-            discussionTimeSeconds: 30,
-            votingTimeSeconds: 45
-        }
-    };
-}
-
-function generateRoundId() {
-    return `round_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-function shuffle(array) {
-    const result = [...array];
-    for (let i = result.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
-}
-
-function transition(state, action) {
-    switch (action.type) {
-        case 'PLAYER_JOIN':
-            return handlePlayerJoin(state, action.player);
-        case 'PLAYER_LEAVE':
-            return handlePlayerLeave(state, action.playerId);
-        case 'JOIN_QUEUE':
-            return han"use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createInitialState = createInitialState;
@@ -153,7 +100,6 @@ function handleJoinQueue(state, playerId) {
     const player = state.players.get(playerId);
     if (!player) return { state, sideEffects: [] };
 
-    // LIMPIEZA: Solo permitimos IDs que realmente estén en la sala
     const cleanQueue = state.queue.filter(id => state.players.has(id));
 
     if (cleanQueue.includes(playerId)) {
@@ -194,7 +140,6 @@ function handleLeaveQueue(state, playerId) {
 function handleStartGame(state, footballers) {
     if (state.phase !== types_1.GamePhase.WAITING) return { state, sideEffects: [] };
     
-    // Doble check de seguridad para no iniciar solo
     const realQueue = state.queue.filter(id => state.players.has(id));
     if (realQueue.length < state.settings.minPlayers) {
         return { state: { ...state, queue: realQueue }, sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: '❌ Jugadores insuficientes' }] };
@@ -332,21 +277,9 @@ function handleResetRound(state) {
     return { state: { ...state, phase: types_1.GamePhase.WAITING, currentRound: null }, sideEffects: [{ type: 'CLEAR_TIMER' }] };
 }
 
-function canPlayerAct(state, playerId, action) {
-    return true; // Simplificado para pruebas
-}
-
-function getCurrentActor(state) {
-    if (state.phase === types_1.GamePhase.CLUES && state.currentRound) {
-        return state.currentRound.clueOrder[state.currentRound.currentClueIndex];
-    }
-    return null;
-}
-
-function getPhaseDescription(phase) {
-    return phase;
-}
-
+function canPlayerAct(state, playerId, action) { return true; }
+function getCurrentActor(state) { return null; }
+function getPhaseDescription(phase) { return phase; }
 function handleEndReveal(state) { return handleResetGame(state); }
 function handleForceReveal(state) { return handleEndVoting(state); }
 function handleSkipPhase(state) { return { state, sideEffects: [] }; }
