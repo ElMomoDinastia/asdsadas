@@ -54,8 +54,45 @@ class GameController {
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer }));
     }
 
-    handlePlayerLeave(player) {
+   handlePlayerLeave(player) {
+        // 1. Verificamos si el que se va estaba participando ACTIVAMENTE de la ronda
+        const estabaJugando = this.isPlayerInRound(player.id);
+
+        // 2. Aplicamos la transición normal para sacarlo del sistema
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_LEAVE', playerId: player.id }));
+
+        // 3. Si el juego está en curso y el que se fue era un jugador activo:
+        if (this.state.phase !== types_1.GamePhase.WAITING && estabaJugando) {
+            
+            // Contamos cuántos quedan VIVOS/ACTIVOS en la ronda actual
+            const vivosAhora = this.state.currentRound?.clueOrder.length || 0;
+
+            // Si quedan menos de 3 jugadores activos, la partida ya no tiene sentido
+            if (vivosAhora < 3) {
+                this.clearPhaseTimer();
+                
+                // Reset total del estado
+                this.state.phase = types_1.GamePhase.WAITING;
+                this.state.currentRound = null;
+                this.state.queue = []; 
+
+                this.adapter.stopGame(); 
+                this.adapter.sendAnnouncement("❌ PARTIDA CANCELADA: Se fueron demasiados jugadores activos.", null, { color: 0xFF4444, fontWeight: "bold" });
+                this.adapter.sendAnnouncement("⚽ Necesitamos al menos 3 jugadores para seguir. ¡Escriban !jugar!", null, { color: 0x00FFCC });
+            } else {
+                // Si todavía quedan suficientes, avisamos que alguien abandonó el barco
+                this.adapter.sendAnnouncement(`🏃 @${player.name.toUpperCase()} abandonó la partida. Seguimos con los que quedan...`, null, { color: 0xFFFF00 });
+                
+                // Si era su turno de dar pista, saltamos al siguiente
+                if (this.state.phase === types_1.GamePhase.CLUES) {
+                    const currentGiverId = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
+                    if (player.id === currentGiverId) {
+                        this.clearPhaseTimer();
+                        this.setPhaseTimer(1); // Salto rápido al siguiente turno
+                    }
+                }
+            }
+        }
     }
 
     handlePlayerChat(player, message) {
