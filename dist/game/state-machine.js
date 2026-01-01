@@ -18,19 +18,47 @@ function transition(state, action) {
                 sideEffects: [{ type: 'ANNOUNCE_PRIVATE', playerId: action.player.id, message: '⚽ ¡Bienvenido! Escribe "jugar" para entrar.' }] 
             };
         
-        case 'PLAYER_LEAVE': {
+      case 'PLAYER_LEAVE': {
             const playersAfterLeave = new Map(state.players);
             playersAfterLeave.delete(action.playerId);
             const queueAfterLeave = state.queue.filter(id => id !== action.playerId);
             
-            let newRound = state.currentRound;
             if (state.currentRound) {
-                newRound = {
+                if (action.playerId === state.currentRound.impostorId) {
+                    return {
+                        state: { 
+                            ...state, 
+                            players: playersAfterLeave, 
+                            queue: queueAfterLeave, 
+                            phase: types_1.GamePhase.REVEAL 
+                        },
+                        sideEffects: [
+                            { type: 'CLEAR_TIMER' },
+                            { type: 'ANNOUNCE_PUBLIC', message: `🏃 EL IMPOSTOR HA ABANDONADO LA SALA...`, style: { color: 0xFFFF00 } },
+                            { type: 'ANNOUNCE_PUBLIC', message: `🏆 ¡VICTORIA PARA LOS INOCENTES!`, style: { color: 0x00FF00, fontWeight: 'bold' } },
+                            { type: 'UPDATE_STATS', winnerRole: 'INOCENTE', winners: state.currentRound.normalPlayerIds.filter(id => id !== action.playerId) },
+                            { type: 'SET_PHASE_TIMER', durationSeconds: 5, nextAction: 'RESET_GAME' }
+                        ]
+                    };
+                }
+
+                const newRound = {
                     ...state.currentRound,
                     clueOrder: state.currentRound.clueOrder.filter(id => id !== action.playerId),
                     normalPlayerIds: state.currentRound.normalPlayerIds.filter(id => id !== action.playerId)
                 };
+
+                return { 
+                    state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, currentRound: newRound }, 
+                    sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `⚠️ Un inocente se ha retirado.` }] 
+                };
             }
+
+            return { 
+                state: { ...state, players: playersAfterLeave, queue: queueAfterLeave }, 
+                sideEffects: [] 
+            };
+        }
 
             return { 
                 state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, currentRound: newRound }, 
