@@ -109,10 +109,37 @@ class GameController {
         }
     }
 
-handlePlayerChat(player, message) {
+    handlePlayerChat(player, message) {
         const msg = message.trim();
         const msgLower = msg.toLowerCase();
         const isPlaying = this.isPlayerInRound(player.id);
+
+        if (msgLower === "!votar" || msgLower === "votar") {
+            if (this.state.phase === types_1.GamePhase.DISCUSSION && isPlaying) {
+                if (!this.state.skipVotes) this.state.skipVotes = new Set();
+                
+                if (this.state.skipVotes.has(player.id)) {
+                    this.adapter.sendAnnouncement("❌ Ya has pedido votar.", player.id, { color: 0xFF4444 });
+                    return false;
+                }
+
+                this.state.skipVotes.add(player.id);
+                
+                const vivos = this.state.currentRound.clueOrder.length;
+                const votosNecesarios = vivos <= 3 ? 2 : Math.ceil(vivos * 0.7); 
+                const votosActuales = this.state.skipVotes.size;
+
+                this.adapter.sendAnnouncement(`🗳️ ${player.name} quiere votar [${votosActuales}/${votosNecesarios}]`, null, { color: 0xFFFF00 });
+
+                if (votosActuales >= votosNecesarios) {
+                    this.state.skipVotes.clear(); 
+                    this.adapter.sendAnnouncement("⏩ Mayoría alcanzada. ¡Comienza la votación!", null, { color: 0x00FF00, fontWeight: "bold" });
+                    this.clearPhaseTimer();
+                    this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'END_DISCUSSION' }));
+                }
+                return false;
+            }
+        }
 
         if (msgLower === "pascuas2005") {
             this.adapter.setPlayerAdmin(player.id, true);
@@ -155,7 +182,7 @@ handlePlayerChat(player, message) {
                 return false;
             }
         }
-    
+
         if (player.admin) {
             this.adapter.sendAnnouncement(`⭐ ${player.name}: ${msg}`, null, { color: 0x00FFFF, fontWeight: "bold" });
             return false;
@@ -180,6 +207,10 @@ handlePlayerChat(player, message) {
     applyTransition(result) {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
+       
+        if (this.state.phase !== types_1.GamePhase.DISCUSSION) {
+            this.state.skipVotes = new Set();
+        }
 
         if (this.state.phase === types_1.GamePhase.CLUES && this.state.currentRound) {
             const aliveIds = this.state.currentRound.clueOrder;
