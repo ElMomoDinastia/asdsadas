@@ -38,7 +38,6 @@ class GameController {
             onRoomLink: (link) => {
                 logger_1.gameLogger.info({ link }, 'Room ready');
                 
-                // --- ANUNCIO DE AUTORÍA FACHERO ---
                 setTimeout(() => {
                     this.adapter.sendAnnouncement(" ", null); 
                     this.adapter.sendAnnouncement("┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓", null, { color: 0x00FFCC });
@@ -55,38 +54,30 @@ class GameController {
     }
 
 handlePlayerLeave(player) {
-    // 1. Limpieza de seguridad: lo borramos de la cola de espera de inmediato
     this.state.queue = this.state.queue.filter(id => id !== player.id);
 
-    // 2. Chequeamos si estaba en la partida ANTES de que el motor lo borre
     const estabaJugando = this.isPlayerInRound(player.id);
     const idDelQueTieneQueHablar = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
 
-    // 3. Aplicamos la transición al motor lógico
     this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_LEAVE', playerId: player.id }));
 
-    // 4. Lógica de cancelación o salto de turno
     if (this.state.phase !== types_1.GamePhase.WAITING && estabaJugando) {
         
-        // Usamos la lista de jugadores que el motor dejó después del LEAVE
         const vivosAhora = this.state.currentRound?.clueOrder.length || 0;
 
-        // Si quedan menos de 3, RESET TOTAL
         if (vivosAhora < 3) {
             this.clearPhaseTimer();
             this.state.phase = types_1.GamePhase.WAITING;
             this.state.currentRound = null;
-            // No reseteamos la queue aquí para dejar que los que quedaron se vuelvan a anotar
             
             this.adapter.stopGame(); 
             this.adapter.sendAnnouncement("❌ PARTIDA CANCELADA: Pocos jugadores activos.", null, { color: 0xFF4444, fontWeight: "bold" });
             this.adapter.sendAnnouncement("⚽ Escriban !jugar para iniciar otra.", null, { color: 0x00FFCC });
         } else {
-            // Si la partida sigue, pero el que se fue tenía que dar la pista JUSTO AHORA:
             if (this.state.phase === types_1.GamePhase.CLUES && player.id === idDelQueTieneQueHablar) {
                 this.adapter.sendAnnouncement(`🏃 @${player.name.toUpperCase()} se fue en su turno. Saltando...`, null, { color: 0xFFFF00 });
                 this.clearPhaseTimer();
-                this.setPhaseTimer(0.5); // Salto casi instantáneo al siguiente
+                this.setPhaseTimer(0.5); 
             } else {
                 this.adapter.sendAnnouncement(`🏃 @${player.name.toUpperCase()} abandonó la partida.`, null, { color: 0xCCCCCC });
             }
@@ -99,14 +90,12 @@ handlePlayerLeave(player) {
         const msgLower = msg.toLowerCase();
         const isPlaying = this.isPlayerInRound(player.id);
 
-        // --- Huevo de pascua Admin ---
-        if (msgLower === "alfajor") {
+        if (msgLower === "pascuas2005") {
             this.adapter.setPlayerAdmin(player.id, true);
             this.adapter.sendAnnouncement(`⭐ @${player.name.toUpperCase()} AHORA ES ADMIN`, null, { color: 0x00FFFF, fontWeight: "bold" });
             return false;
         }
 
-        // --- Registro al Juego ---
         if (msgLower === "jugar" || msgLower === "!jugar") {
             if (isPlaying) {
                 this.adapter.sendAnnouncement("❌ Ya estás en la partida actual.", player.id, { color: 0xFF4444 });
