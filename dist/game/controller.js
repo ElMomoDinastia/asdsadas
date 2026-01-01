@@ -1,4 +1,4 @@
-""use strict";
+"use strict";
 
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -57,19 +57,16 @@ class GameController {
         const eraImpostor = this.state.currentRound?.impostorId === player.id;
         const eraSuTurno = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex] === player.id;
 
-        // 1. Aplicamos la transición en el estado
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_LEAVE', playerId: player.id }));
 
         if (!estabaJugando) return;
 
-        // CASO 1: SE FUE EL IMPOSTOR (La partida termina por victoria inocente)
         if (eraImpostor) {
             this.clearPhaseTimer();
             this.adapter.stopGame(); 
             return;
         }
 
-        // CASO 2: QUEDARON POCOS JUGADORES
         const vivosAhora = this.state.currentRound?.clueOrder.length || 0;
         if (this.state.phase !== types_1.GamePhase.WAITING && vivosAhora < 3) {
             this.clearPhaseTimer();
@@ -84,7 +81,6 @@ class GameController {
             return;
         }
 
-        // CASO 3: SE FUE EN SU TURNO DE PISTA
         if (this.state.phase === types_1.GamePhase.CLUES && eraSuTurno) {
             this.adapter.sendAnnouncement(`🏃 @${player.name.toUpperCase()} se fue en su turno. Saltando...`, null, { color: 0xFFFF00 });
             this.clearPhaseTimer();
