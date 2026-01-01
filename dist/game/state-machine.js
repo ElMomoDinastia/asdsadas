@@ -173,10 +173,14 @@ function handleEndVoting(state) {
     round.votes.forEach(v => counts[v] = (counts[v] || 0) + 1);
     const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
     
+    // 1. Caso: Nadie votó
     if (sorted.length === 0) {
         return { 
-            state: { ...state, phase: types_1.GamePhase.REVEAL },
-            sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: "❌ NADIE VOTÓ. Empate técnico." }, { type: 'RESET_GAME' }]
+            state: { ...state, phase: types_1.GamePhase.REVEAL }, 
+            sideEffects: [
+                { type: 'ANNOUNCE_PUBLIC', message: "❌ NADIE VOTÓ. Empate técnico." }, 
+                { type: 'RESET_GAME' }
+            ] 
         };
     }
 
@@ -184,6 +188,7 @@ function handleEndVoting(state) {
     const isImpostor = votedOutId === round.impostorId;
     const votedName = (state.players.get(votedOutId)?.name || "Alguien").toUpperCase();
 
+    // 2. CASO: MUERE EL IMPOSTOR (Ganan Inocentes)
     if (isImpostor) {
         return { 
             state: { ...state, phase: types_1.GamePhase.REVEAL }, 
@@ -192,13 +197,18 @@ function handleEndVoting(state) {
                 { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` },
                 { type: 'ANNOUNCE_PUBLIC', message: `🎯 ¡LO CAZARON! ${votedName} ERA EL IMPOSTOR`, style: { color: 0x00FF00, fontWeight: "bold" } },
                 { type: 'ANNOUNCE_PUBLIC', message: `🏆 ¡VICTORIA PARA LOS INOCENTES!`, style: { color: 0x00FF00, fontWeight: "bold" } },
-                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` }
+                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` },
+                // MANDA DATOS A MONGO: Ganaron todos menos el impostor
+                { type: 'UPDATE_STATS', winnerRole: 'INOCENTE', winners: round.clueOrder.filter(id => id !== round.impostorId) },
+                { type: 'SET_PHASE_TIMER', durationSeconds: 7, nextAction: 'RESET_GAME' }
             ] 
         };
     } 
 
+    // 3. CASO: MUERE INOCENTE
     const remainingInnocents = round.normalPlayerIds.filter(id => id !== votedOutId);
     
+    // ¿Gana el impostor por falta de gente?
     if (remainingInnocents.length <= 1) {
         const impName = (state.players.get(round.impostorId)?.name || "El Impostor").toUpperCase();
         return { 
@@ -208,15 +218,23 @@ function handleEndVoting(state) {
                 { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` },
                 { type: 'ANNOUNCE_PUBLIC', message: `💀 ¡GAME OVER! GANÓ EL IMPOSTOR (${impName})`, style: { color: 0xFF0000, fontWeight: "bold" } },
                 { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} ERA INOCENTE.`, style: { color: 0xFFFFFF } },
-                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` }
+                { type: 'ANNOUNCE_PUBLIC', message: `━━━━━━━━━━━━━━━━━━━━━━━━` },
+                // MANDA DATOS A MONGO: Ganó solo el impostor
+                { type: 'UPDATE_STATS', winnerRole: 'IMPOSTOR', winners: [round.impostorId] },
+                { type: 'SET_PHASE_TIMER', durationSeconds: 7, nextAction: 'RESET_GAME' }
             ] 
         };
     }
 
+    // 4. LA PARTIDA SIGUE (Nueva ronda de pistas)
+    const nextClueOrder = round.clueOrder.filter(id => id !== votedOutId);
+    const firstPlayerId = nextClueOrder[0];
+    const firstPlayerName = (state.players.get(firstPlayerId)?.name || "ALGUIEN").toUpperCase();
+
     const nextRound = {
         ...round,
         normalPlayerIds: remainingInnocents,
-        clueOrder: round.clueOrder.filter(id => id !== votedOutId),
+        clueOrder: nextClueOrder,
         currentClueIndex: 0,
         clues: new Map(),
         votes: new Map()
@@ -228,6 +246,8 @@ function handleEndVoting(state) {
             { type: 'CLEAR_TIMER' },
             { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} ERA INOCENTE.`, style: { color: 0xFF4444, fontWeight: "bold" } },
             { type: 'ANNOUNCE_PUBLIC', message: `📝 NUEVA RONDA DE PISTAS...`, style: { color: 0xFFFF00, fontWeight: "bold" } },
+            // FIX: ANUNCIO DEL TURNO
+            { type: 'ANNOUNCE_PUBLIC', message: `🔔 TURNO DE: ${firstPlayerName}`, style: { color: 0x00FFCC, fontWeight: "bold" } },
             { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
         ] 
     };
