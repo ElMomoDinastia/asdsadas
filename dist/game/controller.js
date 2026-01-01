@@ -52,7 +52,7 @@ class GameController {
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer }));
     }
 
-    handlePlayerLeave(player) {
+ handlePlayerLeave(player) {
         const estabaJugando = this.isPlayerInRound(player.id);
         const eraImpostor = this.state.currentRound?.impostorId === player.id;
         const eraSuTurno = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex] === player.id;
@@ -63,8 +63,18 @@ class GameController {
 
         if (eraImpostor) {
             this.clearPhaseTimer();
+            this.state.phase = types_1.GamePhase.WAITING; 
+            this.state.currentRound = null;
+            this.state.queue = []; 
+            
             this.adapter.stopGame(); 
-            return;
+
+            this.adapter.sendAnnouncement("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", null, { color: 0xFF4444 });
+            this.adapter.sendAnnouncement(`🚫 EL IMPOSTOR @${player.name.toUpperCase()} ABANDONÓ LA SALA.`, null, { color: 0xFF4444, fontWeight: "bold" });
+            this.adapter.sendAnnouncement("🏆 ¡VICTORIA PARA LOS INOCENTES!", null, { color: 0x00FF00, fontWeight: "bold" });
+            this.adapter.sendAnnouncement("⚽ Escriban !jugar para iniciar otra.", null, { color: 0x00FFCC });
+            this.adapter.sendAnnouncement("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", null, { color: 0xFF4444 });
+            return; 
         }
 
         const vivosAhora = this.state.currentRound?.clueOrder.length || 0;
@@ -72,11 +82,11 @@ class GameController {
             this.clearPhaseTimer();
             this.state.phase = types_1.GamePhase.WAITING;
             this.state.currentRound = null;
+            this.state.queue = [];
             
             this.adapter.stopGame(); 
             this.adapter.sendAnnouncement("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", null, { color: 0xFF4444 });
             this.adapter.sendAnnouncement("❌ PARTIDA CANCELADA: Pocos jugadores activos.", null, { color: 0xFF4444, fontWeight: "bold" });
-            this.adapter.sendAnnouncement("⚽ Escriban !jugar para iniciar otra tanda.", null, { color: 0x00FFCC, fontWeight: "bold" });
             this.adapter.sendAnnouncement("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", null, { color: 0xFF4444 });
             return;
         }
@@ -151,8 +161,7 @@ class GameController {
         this.adapter.sendAnnouncement(`${chatPrefix}${player.name}: ${msg}`, null, { color: chatColor });
         return false; 
     }
-
-    applyTransition(result) {
+        applyTransition(result) {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
 
@@ -177,11 +186,22 @@ class GameController {
 
         if (this.state.phase === types_1.GamePhase.REVEAL) {
             this.clearPhaseTimer();
-            setTimeout(() => this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'END_REVEAL' })), 5000);
+            setTimeout(() => {
+                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'END_REVEAL' }));
+            }, 5000);
         }
 
         if (this.state.phase === types_1.GamePhase.RESULTS) {
-            setTimeout(() => this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'RESET_GAME' })), 5000);
+            this.clearPhaseTimer(); 
+            setTimeout(() => {
+                this.state.phase = types_1.GamePhase.WAITING;
+                this.state.currentRound = null;
+                this.state.queue = []; 
+                
+                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'RESET_GAME' }));
+                
+                this.adapter.sendAnnouncement("⚽ ¡SALA LIBRE! Escriban !jugar para otra partida.", null, { color: 0x00FFCC });
+            }, 5000);
         }
     }
 
