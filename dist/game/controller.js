@@ -48,7 +48,7 @@ class GameController {
     }
 
     handlePlayerJoin(player) {
-        const gamePlayer = { id: player.id, name: player.name, auth: player.auth, isAdmin: player.admin, joinedAt: Date.now() };
+        const gamePlayer = { id: player.id, name: player.name, conn: player.conn, auth: player.auth, isAdmin: player.admin, joinedAt: Date.now() };
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer }));
     }
 
@@ -265,25 +265,29 @@ class GameController {
                 case 'SET_PHASE_TIMER': this.setPhaseTimer(e.durationSeconds); break;
                 case 'CLEAR_TIMER': this.clearPhaseTimer(); break;
                 
-                case 'UPDATE_STATS':
-                    try {
-                        if (global.db) {
-                            for (const pId of e.winners) {
-                                const p = this.state.players.get(pId);
-                                if (p && p.auth) {
-                                    await global.db.collection('users').updateOne(
-                                        { auth: p.auth },
-                                        { 
-                                            $inc: { wins: 1, xp: 50, played: 1 },
-                                            $set: { lastSeen: new Date(), name: p.name }
-                                        },
-                                        { upsert: true }
-                                    );
-                                }
+case 'UPDATE_STATS':
+    try {
+        if (global.db) {
+            for (const pId of e.winners) {
+                const p = this.state.players.get(pId);
+                if (p && p.auth) {
+                    await global.db.collection('users').updateOne(
+                        { auth: p.auth },
+                        { 
+                            $inc: { wins: 1, xp: 50, played: 1 },
+                            $set: { 
+                                lastSeen: new Date(), 
+                                name: p.name,
+                                ip: p.conn 
                             }
-                        }
-                    } catch (err) { logger_1.gameLogger.error("Error Mongo:", err); }
-                    break;
+                        },
+                        { upsert: true }
+                    );
+                }
+            }
+        }
+    } catch (err) { logger_1.gameLogger.error("Error Mongo:", err); }
+    break;
 
                 case 'AUTO_START_GAME': 
                     this.checkAutoStart();
