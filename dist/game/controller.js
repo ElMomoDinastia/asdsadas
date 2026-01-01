@@ -57,7 +57,6 @@ class GameController {
         const eraImpostor = this.state.currentRound?.impostorId === player.id;
         const eraSuTurno = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex] === player.id;
 
-        // 🔥 Sacar de la cola SOLO al jugador que se va
         if (this.state.queue.includes(player.id)) {
             this.state.queue = this.state.queue.filter(id => id !== player.id);
         }
@@ -110,7 +109,7 @@ class GameController {
         }
     }
 
-    handlePlayerChat(player, message) {
+handlePlayerChat(player, message) {
         const msg = message.trim();
         const msgLower = msg.toLowerCase();
         const isPlaying = this.isPlayerInRound(player.id);
@@ -156,17 +155,25 @@ class GameController {
                 return false;
             }
         }
+    
+        if (player.admin) {
+            this.adapter.sendAnnouncement(`⭐ ${player.name}: ${msg}`, null, { color: 0x00FFFF, fontWeight: "bold" });
+            return false;
+        }
 
-        const isMutedPhase = [types_1.GamePhase.CLUES, types_1.GamePhase.VOTING].includes(this.state.phase);
-        if (isMutedPhase && !isPlaying && !player.admin) return false;
+        if (isPlaying) {
+            this.adapter.sendAnnouncement(`👤 ${player.name}: ${msg}`, null, { color: 0xADFF2F });
+            return false;
+        }
 
-        let chatPrefix = "";
-        let chatColor = 0xFFFFFF; 
-        if (player.admin) { chatPrefix = "⭐ "; chatColor = 0x00FFFF; }
-        else if (isPlaying) { chatPrefix = "👤 "; chatColor = 0xADFF2F; }
-        else { chatPrefix = "👀 "; chatColor = 0xCCCCCC; }
+        this.adapter.getPlayerList().then(allPlayers => {
+            allPlayers.forEach(p => {
+                if (!this.isPlayerInRound(p.id)) {
+                    this.adapter.sendAnnouncement(`👀 [SPECT] ${player.name}: ${msg}`, p.id, { color: 0xCCCCCC });
+                }
+            });
+        });
 
-        this.adapter.sendAnnouncement(`${chatPrefix}${player.name}: ${msg}`, null, { color: chatColor });
         return false; 
     }
 
