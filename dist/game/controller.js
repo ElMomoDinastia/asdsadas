@@ -242,23 +242,39 @@ class GameController {
             }
         } catch (err) { logger_1.gameLogger.error("Error Mongo:", err); }
     }
-
-    async setupGameField() {
+    
+        async setupGameField() {
         if (!this.state.currentRound) return;
         const ids = this.state.currentRound.clueOrder;
-        try {
-            await this.adapter.stopGame();
-            const all = await this.adapter.getPlayerList();
-            for (const p of all) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
-            for (const id of ids) await this.adapter.setPlayerTeam(id, 1);
-            await this.adapter.startGame();
-            setTimeout(() => {
-                ids.forEach((id, i) => {
-                    this.adapter.setPlayerDiscProperties(id, { x: SEAT_POSITIONS[i].x, y: SEAT_POSITIONS[i].y, xspeed: 0, yspeed: 0 });
+            try {
+                await this.adapter.stopGame();
+                await this.adapter.setTeamsLock(true);
+
+        const all = await this.adapter.getPlayerList();
+            for (const p of all) {
+                if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+        }
+        for (const id of ids) {
+            await this.adapter.setPlayerTeam(id, 1);
+        }
+
+        await this.adapter.startGame();
+
+        setTimeout(() => {
+            ids.forEach((id, i) => {
+                this.adapter.setPlayerDiscProperties(id, { 
+                    x: SEAT_POSITIONS[i].x, 
+                    y: SEAT_POSITIONS[i].y, 
+                    xspeed: 0, 
+                    yspeed: 0 
                 });
-            }, 500);
-        } catch (e) { logger_1.gameLogger.error("Field Error:", e); }
+            });
+        }, 500);
+
+    } catch (e) { 
+        logger_1.gameLogger.error("Field Error:", e); 
     }
+}
 
     containsSpoiler(clue, foot) {
         if (!foot) return false;
