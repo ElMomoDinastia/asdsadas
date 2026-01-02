@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.HBRoomAdapter = void 0;
 exports.createHBRoomAdapter = createHBRoomAdapter;
 
-// Configuración de Puppeteer Extra con Stealth
 const puppeteer_extra_1 = __importDefault(require("puppeteer-extra"));
 const puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-plugin-stealth"));
 puppeteer_extra_1.default.use((0, puppeteer_extra_plugin_stealth_1.default)());
@@ -62,15 +61,23 @@ class HBRoomAdapter {
             await this.page.waitForFunction('typeof HBInit === "function"', { timeout: 30000 });
             logger_1.roomLogger.info('HBInit API is ready');
 
-            // --- CONFIGURACIÓN MODIFICADA ---
+           
+            const roomNumber = this.config.roomNumber || 1;
+            const latBase = -34.5630760192871;
+            const offset = (roomNumber - 1) * 0.001; 
+
             const roomConfig = {
                 roomName: this.config.roomName,
                 maxPlayers: this.config.maxPlayers,
-                noPlayer: false, // <--- CAMBIADO: Ahora el Host es visible
+                noPlayer: false, 
                 token: this.config.token || '',
                 public: this.config.public ?? true,
                 password: this.config.password || null,
-                geo: { "code": "ar", "lat": -34.5630760192871, "lon": -58.4608917236328 } // <--- CAMBIADO: Geo Argentina
+                geo: { 
+                    "code": "ar", 
+                    "lat": latBase - offset, 
+                    "lon": -58.4608917236328 
+                }
             };
 
             logger_1.roomLogger.info({ config: { ...roomConfig, token: '[REDACTED]' } }, 'Creating HaxBall room...');
