@@ -77,6 +77,7 @@ class GameController {
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_LEAVE', playerId: player.id }));
 
         if (this.state.phase === types_1.GamePhase.WAITING || this.state.phase === types_1.GamePhase.REVEAL) {
+            this.adapter.setTeamsLock(false);
             this.adapter.stopGame();
         }
     }
@@ -96,13 +97,10 @@ class GameController {
             if (this.state.phase === types_1.GamePhase.DISCUSSION && isPlaying) {
                 if (!this.state.skipVotes) this.state.skipVotes = new Set();
                 if (this.state.skipVotes.has(player.id)) return false;
-
                 this.state.skipVotes.add(player.id);
                 const vivos = this.state.currentRound.clueOrder.length;
                 const votosNecesarios = vivos <= 3 ? 2 : Math.ceil(vivos * 0.7);
-                
                 this.adapter.sendAnnouncement(`🗳️ ${player.name} quiere votar [${this.state.skipVotes.size}/${votosNecesarios}]`, null, { color: 0xFFFF00 });
-
                 if (this.state.skipVotes.size >= votosNecesarios) {
                     this.state.skipVotes.clear();
                     this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'END_DISCUSSION' }));
@@ -135,14 +133,18 @@ class GameController {
 
         if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
             const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
-            if (player.id === currentGiverId) {
-                if (this.containsSpoiler(msg, this.state.currentRound.footballer)) {
-                    this.adapter.sendAnnouncement('⚠️ ¡NO DIGAS EL NOMBRE!', player.id, { color: 0xFF4444, fontWeight: "bold" });
-                    return false;
-                }
-                this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: msg }));
+            
+            if (player.id !== currentGiverId) {
+                this.adapter.sendAnnouncement("🚫 ¡Silencio! Solo el que da pista puede hablar.", player.id, { color: 0xFF4444 });
                 return false;
             }
+
+            if (this.containsSpoiler(msg, this.state.currentRound.footballer)) {
+                this.adapter.sendAnnouncement('⚠️ ¡NO DIGAS EL NOMBRE!', player.id, { color: 0xFF4444, fontWeight: "bold" });
+                return false;
+            }
+            this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: player.id, clue: msg }));
+            return false;
         }
 
         if (player.admin) {
@@ -166,7 +168,17 @@ class GameController {
     }
 
     applyTransition(result) {
+        const previousPhase = this.state.phase;
         this.state = result.state;
+
+        if (previousPhase === types_1.GamePhase.VOTING && this.state.phase === types_1.GamePhase.CLUES) {
+            this.adapter.sendAnnouncement("⌛ Preparando pistas... (2s de gracia)", null, { color: 0xCCCCCC });
+            setTimeout(() => {
+                this.executeSideEffects(result.sideEffects);
+            }, 2000);
+            return;
+        }
+
         this.executeSideEffects(result.sideEffects);
 
         if (this.state.phase === types_1.GamePhase.ASSIGN && !this.assignDelayTimer) {
@@ -208,21 +220,19 @@ class GameController {
     }
     
     async savePlayerLogToMongo(data) {
-    if (!global.db) return;
-    try {
-   
-        await global.db.collection('playerlogs').insertOne({
-            name: data.name,
-            auth: data.auth,
-            conn: data.conn,
-            room: data.room,
-            timestamp: new Date() 
-        });
-        logger_1.gameLogger.debug({ auth: data.auth }, 'Log de jugador guardado');
-    } catch (err) { 
-        logger_1.gameLogger.error("Error guardando PlayerLog:", err); 
+        if (!global.db) return;
+        try {
+            await global.db.collection('playerlogs').insertOne({
+                name: data.name,
+                auth: data.auth,
+                conn: data.conn,
+                room: data.room,
+                timestamp: new Date() 
+            });
+        } catch (err) { 
+            logger_1.gameLogger.error("Error guardando PlayerLog:", err); 
+        }
     }
-}
 
     async updateMongoStats(winners) {
         if (!global.db) return;
@@ -243,38 +253,37 @@ class GameController {
         } catch (err) { logger_1.gameLogger.error("Error Mongo:", err); }
     }
     
-        async setupGameField() {
+    async setupGameField() {
         if (!this.state.currentRound) return;
         const ids = this.state.currentRound.clueOrder;
-            try {
-                await this.adapter.stopGame();
-                await this.adapter.setTeamsLock(true);
-
-        const all = await this.adapter.getPlayerList();
+        try {
+            await this.adapter.stopGame();
+            await this.adapter.setTeamsLock(true);
+            const all = await this.adapter.getPlayerList();
             for (const p of all) {
                 if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
-        }
-        for (const id of ids) {
-            await this.adapter.setPlayerTeam(id, 1);
-        }
+            }
+            for (const id of ids) {
+                await this.adapter.setPlayerTeam(id, 1);
+            }
 
-        await this.adapter.startGame();
+            await this.adapter.startGame();
 
-        setTimeout(() => {
-            ids.forEach((id, i) => {
-                this.adapter.setPlayerDiscProperties(id, { 
-                    x: SEAT_POSITIONS[i].x, 
-                    y: SEAT_POSITIONS[i].y, 
-                    xspeed: 0, 
-                    yspeed: 0 
+            setTimeout(() => {
+                ids.forEach((id, i) => {
+                    this.adapter.setPlayerDiscProperties(id, { 
+                        x: SEAT_POSITIONS[i].x, 
+                        y: SEAT_POSITIONS[i].y, 
+                        xspeed: 0, 
+                        yspeed: 0 
+                    });
                 });
-            });
-        }, 500);
+            }, 500);
 
-    } catch (e) { 
-        logger_1.gameLogger.error("Field Error:", e); 
+        } catch (e) { 
+            logger_1.gameLogger.error("Field Error:", e); 
+        }
     }
-}
 
     containsSpoiler(clue, foot) {
         if (!foot) return false;
