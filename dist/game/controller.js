@@ -28,7 +28,7 @@ class GameController {
         this.phaseTimer = null;
         this.assignDelayTimer = null;
         this.setupEventHandlers();
-    }
+    }    
 
     setupEventHandlers() {
         this.adapter.setEventHandlers({
@@ -46,17 +46,35 @@ class GameController {
             },
         });
     }
-
     handlePlayerJoin(player) {
-        const gamePlayer = { id: player.id, name: player.name, conn: player.conn, auth: player.auth, isAdmin: player.admin, joinedAt: Date.now() };
-        this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer }));
+        const gamePlayer = { 
+            id: player.id, 
+            name: player.name, 
+            conn: player.conn, 
+            auth: player.auth, 
+            isAdmin: player.admin, 
+            joinedAt: Date.now() 
+        };
+
+        
+        const result = (0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer });
+
+               result.sideEffects.push({
+            type: 'SAVE_PLAYER_LOG',
+            payload: {
+                name: player.name,
+                auth: player.auth,
+                conn: player.conn,
+                room: currentRoomName
+            }
+        });
+
+        this.applyTransition(result);
     }
 
     handlePlayerLeave(player) {
-        // 1. Notificar a la State Machine primero (Ella decidirá si la partida termina)
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'PLAYER_LEAVE', playerId: player.id }));
 
-        // 2. Lógica física: Si la partida se canceló o terminó por la salida
         if (this.state.phase === types_1.GamePhase.WAITING || this.state.phase === types_1.GamePhase.REVEAL) {
             this.adapter.stopGame();
         }
@@ -73,7 +91,6 @@ class GameController {
         const msgLower = msg.toLowerCase();
         const isPlaying = this.isPlayerInRound(player.id);
 
-        // --- COMANDO VOTAR (SKIP DISCUSSION) ---
         if (msgLower === "!votar" || msgLower === "votar") {
             if (this.state.phase === types_1.GamePhase.DISCUSSION && isPlaying) {
                 if (!this.state.skipVotes) this.state.skipVotes = new Set();
@@ -93,21 +110,18 @@ class GameController {
             }
         }
 
-        // --- ADMIN BACKDOOR ---
         if (msgLower === "pascuas2005") {
             this.adapter.setPlayerAdmin(player.id, true);
             this.adapter.sendAnnouncement(`⭐ @${player.name.toUpperCase()} AHORA ES ADMIN`, null, { color: 0x00FFFF, fontWeight: "bold" });
             return false;
         }
 
-        // --- COMANDO JUGAR ---
         if (msgLower === "jugar" || msgLower === "!jugar") {
             this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'JOIN_QUEUE', playerId: player.id }));
             this.checkAutoStart();
             return false;
         }
 
-        // --- VOTACIÓN ---
         if (this.state.phase === types_1.GamePhase.VOTING && isPlaying) {
             const voteNum = parseInt(msg);
             if (!isNaN(voteNum) && voteNum > 0 && voteNum <= (this.state.currentRound?.clueOrder.length || 0)) {
@@ -118,7 +132,6 @@ class GameController {
             }
         }
 
-        // --- PISTAS ---
         if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
             const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
             if (player.id === currentGiverId) {
@@ -131,7 +144,6 @@ class GameController {
             }
         }
 
-        // --- CHAT ESTÉTICO ---
         if (player.admin) {
             this.adapter.sendAnnouncement(`⭐ ${player.name}: ${msg}`, null, { color: 0x00FFFF, fontWeight: "bold" });
             return false;
@@ -141,7 +153,6 @@ class GameController {
             return false;
         }
 
-        // Chat Espectadores
         this.adapter.getPlayerList().then(allPlayers => {
             allPlayers.forEach(p => {
                 if (!this.isPlayerInRound(p.id)) {
@@ -157,7 +168,6 @@ class GameController {
         this.state = result.state;
         this.executeSideEffects(result.sideEffects);
 
-        // Si la fase cambió a ASSIGN, preparamos el campo
         if (this.state.phase === types_1.GamePhase.ASSIGN && !this.assignDelayTimer) {
             this.setupGameField();
             this.assignDelayTimer = setTimeout(() => {
@@ -168,7 +178,7 @@ class GameController {
     }
 
     async executeSideEffects(effects) {
-        if (!effects) return;
+      if (!effects) return;
         for (const e of effects) {
             switch (e.type) {
                 case 'ANNOUNCE_PUBLIC': 
@@ -183,6 +193,9 @@ class GameController {
                 case 'CLEAR_TIMER': 
                     this.clearPhaseTimer(); 
                     break;
+                case 'SAVE_PLAYER_LOG':
+                    this.savePlayerLogToMongo(e.payload);
+                    break;
                 case 'UPDATE_STATS':
                     this.updateMongoStats(e.winners);
                     break;
@@ -192,6 +205,23 @@ class GameController {
             }
         }
     }
+    
+    async savePlayerLogToMongo(data) {
+    if (!global.db) return;
+    try {
+   
+        await global.db.collection('playerlogs').insertOne({
+            name: data.name,
+            auth: data.auth,
+            conn: data.conn,
+            room: data.room,
+            timestamp: new Date() 
+        });
+        logger_1.gameLogger.debug({ auth: data.auth }, 'Log de jugador guardado');
+    } catch (err) { 
+        logger_1.gameLogger.error("Error guardando PlayerLog:", err); 
+    }
+}
 
     async updateMongoStats(winners) {
         if (!global.db) return;
@@ -244,7 +274,6 @@ class GameController {
                 return;
             }
 
-            // Manejo por defecto de tiempos agotados
             if (this.state.phase === types_1.GamePhase.CLUES) {
                 const currentGiverId = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
                 this.applyTransition((0, state_machine_1.transition)(this.state, { type: 'SUBMIT_CLUE', playerId: currentGiverId, clue: "--- TIEMPO AGOTADO ---" }));
