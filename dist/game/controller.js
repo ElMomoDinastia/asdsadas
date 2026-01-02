@@ -46,6 +46,7 @@ class GameController {
             },
         });
     }
+    
     handlePlayerJoin(player) {
         const gamePlayer = { 
             id: player.id, 
@@ -56,16 +57,16 @@ class GameController {
             joinedAt: Date.now() 
         };
 
-        
         const result = (0, state_machine_1.transition)(this.state, { type: 'PLAYER_JOIN', player: gamePlayer });
+        const detectedRoomName = config_1.config.roomName || config_1.config.publicName || "SALA DESCONOCIDA";
 
-               result.sideEffects.push({
+        result.sideEffects.push({
             type: 'SAVE_PLAYER_LOG',
             payload: {
                 name: player.name,
                 auth: player.auth,
                 conn: player.conn,
-                room: currentRoomName
+                room: detectedRoomName 
             }
         });
 
