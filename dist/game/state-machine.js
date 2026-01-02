@@ -204,18 +204,20 @@ function transition(state, action) {
 
         case 'END_VOTING': return handleEndVoting(state);
         
-        case 'RESET_GAME': 
-            return { 
-                state: { ...state, phase: types_1.GamePhase.WAITING, currentRound: null }, 
-                sideEffects: [
-                    { type: 'CLEAR_TIMER' },
-                    { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' },
-                    { type: 'ANNOUNCE_PUBLIC', message: '🎮 ¡PARTIDA FINALIZADA!', style: { color: 0x00FFCC, fontWeight: 'bold' } },
-                    { type: 'ANNOUNCE_PUBLIC', message: '👉 Escriban "jugar" para la próxima.', style: { color: 0xFFFF00, fontWeight: 'bold' } },
-                    { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' },
-                    { type: 'AUTO_START_GAME' } 
-                ] 
-            };
+       case 'RESET_GAME': 
+       const lastFootballer = state.currentRound?.footballer || "Desconocido";
+
+    return { 
+        state: { ...state, phase: types_1.GamePhase.WAITING, currentRound: null }, 
+        sideEffects: [
+            { type: 'CLEAR_TIMER' },
+            { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' },
+            { type: 'ANNOUNCE_PUBLIC', message: `🎮 ¡PARTIDA FINALIZADA! EL FUTBOLISTA ERA ${lastFootballer.toUpperCase()}`, style: { color: 0x00FFCC, fontWeight: 'bold' } },
+            { type: 'ANNOUNCE_PUBLIC', message: '👉 Escriban "jugar" para la próxima.', style: { color: 0xFFFF00, fontWeight: 'bold' } },
+            { type: 'ANNOUNCE_PUBLIC', message: '━━━━━━━━━━━━━━━━━━━━━━━━' },
+            { type: 'AUTO_START_GAME' } 
+        ] 
+    };
             
         default: return { state, sideEffects: [] };
     }
