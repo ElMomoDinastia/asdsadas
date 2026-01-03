@@ -59,7 +59,7 @@ class HBRoomAdapter {
             } else if (this.config.isFooter) {
                 finalName = "◥◣━━━━━━  ᴅsᴄ.ɢɢ/ᴄʜɪɴᴏᴄɪᴛʏ  ━━━━━━◢◤";
             } else {
-                const fancyNums = ["𝟬𝟬", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱"];
+                const fancyNums = ["", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲"];
                 const n = fancyNums[roomNumber] || roomNumber;
                 finalName = `▌  🔴   »  「 𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍 」  𝙎-${n}  «  ▐`;
             }
