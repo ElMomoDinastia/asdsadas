@@ -17,12 +17,13 @@ function getEnvNumber(key, defaultValue) {
 }
 
 function loadConfig() {
-    const instanceId = getEnvNumber('ROOM_ID', 1);
-        const haxballToken = process.env[`TOKEN_${instanceId}`] || process.env.HAXBALL_TOKEN;
+    const instanceId = getEnvNumber('ROOM_ID', 0); 
+    
+    const haxballToken = process.env.HAXBALL_TOKEN;
 
     return {
         roomNumber: instanceId,
-        token: haxballToken && haxballToken.trim() !== '' ? haxballToken : undefined,
+        token: haxballToken && haxballToken.trim() !== '' ? haxballToken.trim() : undefined,
         isHeader: process.env.IS_HEADER === 'true',
         isFooter: process.env.IS_FOOTER === 'true',
         maxPlayers: getEnvNumber('MAX_PLAYERS', 15),
@@ -38,7 +39,6 @@ function loadConfig() {
         hasToken: !!(haxballToken && haxballToken.trim() !== ''),
     };
 }
-
 exports.config = loadConfig();
 
 function getPublicConfig() {
