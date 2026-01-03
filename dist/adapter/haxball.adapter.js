@@ -78,7 +78,7 @@ class HBRoomAdapter {
             } else {
                 const fancyNums = ["𝟬𝟬", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳"];
                 const n = fancyNums[roomNumber] || roomNumber;
-                finalName = `🔴 » 「𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍」 𝙎-${n} « ▐`;
+                finalName = `▐ 🔴 » 「𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍」 𝙎-${n} « 🔴 ▐`;
             }
 
             const roomConfig = {
@@ -88,7 +88,7 @@ class HBRoomAdapter {
                 token: (this.config.token || '').trim(),
                 public: this.config.public ?? true,
                 password: this.config.password || null,
-                geo: { "code": "ar", "lat": -34.501, "lon": -58.442 - (roomNumber * 0.0002) }
+                geo: { "code": "ar", "lat": -34.501, "lon": -58.442 + (roomNumber * 0.0002) }
             };
 
             // PASAMOS roomConfig e isDecorativo explícitamente al navegador
