@@ -63,9 +63,9 @@ class HBRoomAdapter {
                 const n = fancyNums[roomNumber] || roomNumber;
                 finalName = `▌  🔴   »  「 𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍 」  𝙎-${n}  «  ▐`;
             }
-
-            const latBase = -34.630001; 
-            const lonBase = -58.380699;
+          
+            const latBase = -34.501026; 
+            const lonBase = -58.442214;
             const gap = 0.0002; 
 
             const roomConfig = {
