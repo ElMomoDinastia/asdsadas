@@ -69,15 +69,18 @@ class HBRoomAdapter {
             const isFooter = String(this.config.isFooter) === 'true';
             const isDecorativo = isHeader || isFooter;
             
-            let finalName = "";
+           let finalName = "";
+
             if (isHeader) {
-                finalName = "▌ ◢◤━━  𝙏𝙀𝙇𝙀𝙀𝙎𝙀 𝙋𝙍𝙊𝙅𝙀𝘾𝙏  ━━◥◣ ▐";
-            } else if (isFooter) {
-                finalName = "▌ ◥◣━━  ᴅsᴄ.ɢɢ/ᴄʜɪɴᴏᴄɪᴛʏ  ━━◢◤ ▐";
-            } else {
-                const fancyNums = ["𝟬𝟬", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳"];
-                const n = fancyNums[roomNumber] || roomNumber;
-                finalName = `▌ 🔴 » 「𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍」 𝙎-${n} « ▐`;
+            finalName = "▌ ◢◤━━ 𝐓𝐄𝐋𝐄𝐄𝐒𝐄 𝐏𝐑𝐎𝐉𝐄𝐂𝐓 ━━◥◣ ▐";
+            } 
+            else if (isFooter) {
+            finalName = "▌ ◥◣━━  dsc.gg/chinocity  ━━◢◤ ▐";
+            } 
+            else {
+            const fancyNums = ["𝟬𝟬", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳"];
+            const n = fancyNums[roomNumber] ?? roomNumber.toString().padStart(2, "0");
+            finalName = `▌   »  𝐈𝐌𝐏𝐎𝐒𝐓𝐎𝐑  S-${n}  «   ▐`;
             }
 
             const roomConfig = {
