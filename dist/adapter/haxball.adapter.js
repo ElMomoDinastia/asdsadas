@@ -63,22 +63,21 @@ class HBRoomAdapter {
             await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'networkidle2', timeout: 30000 });
             await this.page.waitForFunction('typeof HBInit === "function"', { timeout: 30000 });
 
-            // --- CORRECCIÓN DE VARIABLES DINÁMICAS ---
+            // --- 1. PROCESAMIENTO DE VARIABLES ---
             const roomNumber = parseInt(this.config.roomNumber) || 0;
             const isHeader = String(this.config.isHeader) === 'true';
             const isFooter = String(this.config.isFooter) === 'true';
             const isDecorativo = isHeader || isFooter;
             
-            // --- NOMBRES OPTIMIZADOS (No se cortan en el buscador) ---
             let finalName = "";
             if (isHeader) {
-                finalName = "◢◤  𝙏𝙀𝙇𝙀𝙀𝙎𝙀 𝙋𝙍𝙊𝙅𝙀𝘾𝙏  ◥◣";
+                finalName = "▌ ◢◤━━━━  𝙏𝙀𝙇𝙀𝙀𝙎𝙀 𝙋𝙍𝙊𝙅𝙀𝘾𝙏  ━━━━◥◣ ▐";
             } else if (isFooter) {
-                finalName = "◥◣  ᴅsᴄ.ɢɢ/ᴄʜɪɴᴏᴄɪᴛʏ  ◢◤";
+                finalName = "▌ ◥◣━━━━  ᴅsᴄ.ɢɢ/ᴄʜɪɴᴏᴄɪᴛʏ  ━━━━◢◤ ▐";
             } else {
                 const fancyNums = ["𝟬𝟬", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳"];
                 const n = fancyNums[roomNumber] || roomNumber;
-                finalName = `▐ 🔴 » 「𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍」 𝙎-${n} « 🔴 ▐`;
+                finalName = `▌ 🔴 » 「𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍」 𝙎-${n} « ▐`;
             }
 
             const roomConfig = {
@@ -88,10 +87,13 @@ class HBRoomAdapter {
                 token: (this.config.token || '').trim(),
                 public: this.config.public ?? true,
                 password: this.config.password || null,
-                geo: { "code": "ar", "lat": -34.501, "lon": -58.442 + (roomNumber * 0.0002) }
+                geo: { 
+                    "code": "ar", 
+                    "lat": -34.501,
+                    "lon": -58.442 + (roomNumber * 0.01)
+                }
             };
 
-            // PASAMOS roomConfig e isDecorativo explícitamente al navegador
             const roomLink = await this.page.evaluate(async (config, isDeco) => {
                 return new Promise((resolve, reject) => {
                     try {
