@@ -128,6 +128,7 @@
         });
     
         this.applyTransition(result);
+          this.checkAutoStart();
       }
     
       handlePlayerLeave(player) {
@@ -147,22 +148,22 @@
         }
       }
     
-      checkAutoStart() {
-        if (
-          this.state.queue.length >= 5 &&
-          this.state.phase === types_1.GamePhase.WAITING
-        ) {
-          this.applyTransition(
-            (0, state_machine_1.transition)(this.state, {
-              type: "START_GAME",
-              footballers: this.footballers,
-            })
-          );
+  checkAutoStart() {
+    if (this.state.queue.length >= 5 && this.state.phase === types_1.GamePhase.WAITING) {
+        this.adapter.sendAnnouncement("🚀 ¡SALA LLENA! La partida comienza en instantes...", null, { color: 0x00FF00, fontWeight: 'bold' });
+        const result = (0, state_machine_1.transition)(this.state, {
+            type: "START_GAME",
+            footballers: this.footballers,
+        });
+        // a ver si chatgpt tiene razon en esto y me caga... 
+        this.applyTransition(result);
+        if (this.state.phase === types_1.GamePhase.ASSIGN) {
+            console.log("Forzando setup del campo...");
+            this.setupGameField();
         }
-      }
+    }
+}
     
-
-
 /* ───────────── HELPER DE RANGOS ───────────── */
 getRangeInfo(xp) {
     let current = RANGOS[0];
@@ -271,6 +272,7 @@ async handlePlayerChat(player, message) {
 
     if (msgLower === "jugar" || msgLower === "!jugar") {
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: "JOIN_QUEUE", playerId: player.id }));
+        this.checkAutoStart();
         return false;
     }
 
