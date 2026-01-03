@@ -30,13 +30,18 @@ async function main() {
         }
     }
 
+
     const roomConfig = {
-    roomName: config_1.config.roomName,
-    maxPlayers: config_1.config.maxPlayers,
-    noPlayer: config_1.config.noPlayer,
-    token: config_1.config.token,
-    public: true,
-    geo: config_1.config.geo
+        roomNumber: config_1.config.roomNumber, 
+        isHeader: config_1.config.isHeader,     
+        isFooter: config_1.config.isFooter,     
+        
+        roomName: config_1.config.roomName,
+        maxPlayers: config_1.config.maxPlayers,
+        noPlayer: config_1.config.noPlayer,
+        token: config_1.config.token,
+        public: true,
+        geo: config_1.config.geo
     };
 
     const adapter = (0, haxball_adapter_1.createHBRoomAdapter)(roomConfig);
@@ -65,7 +70,7 @@ async function main() {
         logger_1.logger.info('🎮 HaxBall Impostor Game is running!');
     } catch (error) {
         logger_1.logger.error('Failed to start game controller');
-        console.error(error); // Para ver el detalle del error en consola
+        console.error(error); 
         shutdown(1);
     }
 }
