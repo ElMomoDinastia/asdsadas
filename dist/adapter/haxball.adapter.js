@@ -42,20 +42,32 @@ class HBRoomAdapter {
                     '--disable-gpu',
                     '--disable-software-rasterizer',
                     '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process'
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-features=WebRtcHideLocalIpsWithMdns',
+                    '--ignore-certificate-errors',
+                    '--allow-running-insecure-content',
+                    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
                 ],
             });
+
             this.page = await this.browser.newPage();
-            
-            // CAMBIO CLAVE: Usamos domcontentloaded para evitar el bloqueo de red
-            await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await this.page.setViewport({ width: 1280, height: 720 });
+
+            // Captura de logs del navegador (como tenías en el original)
+            this.page.on('console', (msg) => {
+                const text = msg.text();
+                if (text.includes('[HaxBall]')) {
+                    logger_1.roomLogger.debug({ browserLog: text }, 'Browser console');
+                }
+            });
+
+            await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'networkidle2', timeout: 30000 });
             await this.page.waitForFunction('typeof HBInit === "function"', { timeout: 30000 });
 
-            /* ───────────── CONFIGURACIÓN DE TELEESE PROJECT ───────────── */
-            
             const roomNumber = this.config.roomNumber || 0;
             const isDecorativo = this.config.isHeader || this.config.isFooter;
             
+            // Lógica de nombres Teleese Project
             let finalName = "";
             if (this.config.isHeader) {
                 finalName = "◢◤━━━━━━━  𝙏𝙀𝙇𝙀𝙀𝙎𝙀 𝙋𝙍𝙊𝙅𝙀𝘾𝙏  ━━━━━━━◥◣";
@@ -66,44 +78,31 @@ class HBRoomAdapter {
                 const n = fancyNums[roomNumber] || roomNumber;
                 finalName = `▌  🔴   »  「 𝙄𝙈𝙋𝙊𝙎𝙏𝙊𝙍 」  𝙎-${n}  «  ▐`;
             }
-          
-            const latBase = -34.501026; 
-            const lonBase = -58.442214;
-            const gap = 0.0002; 
 
             const roomConfig = {
                 roomName: finalName,
                 maxPlayers: isDecorativo ? 2 : (this.config.maxPlayers || 15),
                 noPlayer: false,
-                token: (this.config.token || '').trim(), // Limpieza de espacios invisibles
+                token: (this.config.token || '').trim(),
                 public: this.config.public ?? true,
                 password: this.config.password || null,
-                geo: { 
-                    "code": "ar", 
-                    "lat": latBase, 
-                    "lon": lonBase - (roomNumber * gap) 
-                }
+                geo: { "code": "ar", "lat": -34.501, "lon": -58.442 - (roomNumber * 0.0002) }
             };
-
-            /* ───────────── INYECCIÓN Y CREACIÓN ───────────── */
 
             const roomLink = await this.page.evaluate(async (config, isDeco) => {
                 return new Promise((resolve, reject) => {
                     try {
-                        if (typeof HBInit === 'undefined') return reject(new Error('HBInit no cargó'));
-                        
                         const room = HBInit(config);
+                        if (!room) return reject(new Error('HBInit devolvió null'));
+
                         window.__haxRoom = room;
                         window.__haxEvents = [];
 
                         room.onRoomLink = (link) => resolve(link);
 
                         room.onPlayerJoin = (player) => {
-                            if (isDeco) {
-                                room.kickPlayer(player.id, "SALA INFORMATIVA - TELEESE PROJECT", false);
-                            } else {
-                                window.__haxEvents.push({ type: 'playerJoin', player });
-                            }
+                            if (isDeco) room.kickPlayer(player.id, "SALA INFORMATIVA", false);
+                            else window.__haxEvents.push({ type: 'playerJoin', player });
                         };
 
                         room.onPlayerLeave = (player) => {
@@ -116,9 +115,8 @@ class HBRoomAdapter {
                             return false;
                         };
 
-                        // Timeout interno de seguridad un poco más corto que el general
-                        setTimeout(() => reject(new Error('HaxBall no devolvió el link (Token inválido o IP bloqueada)')), 55000);
-                    } catch (err) { reject(new Error('Error en HBInit: ' + err.message)); }
+                        setTimeout(() => reject(new Error('HaxBall no devolvió el link (Timeout)')), 55000);
+                    } catch (err) { reject(err); }
                 });
             }, roomConfig, isDecorativo);
 
@@ -128,15 +126,10 @@ class HBRoomAdapter {
             if (!isDecorativo) {
                 await this.loadDefaultStadium();
                 this.startEventPolling();
-            } else {
-                await this.page.evaluate(() => {
-                    window.__haxRoom?.setTeamsLock(true);
-                    window.__haxRoom?.setTimeLimit(0);
-                });
             }
 
             if (this.handlers.onRoomLink) this.handlers.onRoomLink(roomLink);
-            logger_1.roomLogger.info({ link: roomLink, room: finalName }, '✅ Sala publicada');
+            logger_1.roomLogger.info({ link: roomLink, room: finalName }, '✅ SALA ONLINE');
 
         } catch (error) {
             logger_1.roomLogger.error('Error inicializando:', error);
@@ -145,12 +138,13 @@ class HBRoomAdapter {
         }
     }
 
+    // --- MÉTODOS DE INTERACCIÓN RECUPERADOS Y COMPLETOS ---
+
     async loadDefaultStadium() {
         if (!this.page) return;
         try {
             const stadium = JSON.stringify({
-                "name": "Mesa Impostor by Teleese",
-                "width": 400, "height": 400,
+                "name": "Mesa Impostor", "width": 400, "height": 400,
                 "bg": { "type": "grass", "width": 400, "height": 400, "kickOffRadius": 0 },
                 "discs": [
                     { "pos": [0, -130], "radius": 30, "invMass": 0, "color": "transparent", "cGroup": ["c0"], "cMask": ["ball"] },
@@ -184,9 +178,16 @@ class HBRoomAdapter {
         }, 100);
     }
 
+    // Estas funciones son las que el GameController llama constantemente:
     async sendChat(msg, id) { await this.page?.evaluate((m, i) => window.__haxRoom?.sendChat(m, i), msg, id); }
+    async sendAnnouncement(msg, tid, opts) { await this.page?.evaluate((m, t, o) => window.__haxRoom?.sendAnnouncement(m, t, o?.color, o?.style, o?.sound), msg, tid, opts); }
     async kickPlayer(id, r, b) { await this.page?.evaluate((i, r, b) => window.__haxRoom?.kickPlayer(i, r, b), id, r, b); }
     async setPlayerAdmin(id, a) { await this.page?.evaluate((i, a) => window.__haxRoom?.setPlayerAdmin(i, a), id, a); }
+    async setPlayerTeam(id, t) { await this.page?.evaluate((i, team) => window.__haxRoom?.setPlayerTeam(i, team), id, t); }
+    async startGame() { await this.page?.evaluate(() => window.__haxRoom?.startGame()); }
+    async stopGame() { await this.page?.evaluate(() => window.__haxRoom?.stopGame()); }
+    async setTeamsLock(l) { await this.page?.evaluate((locked) => window.__haxRoom?.setTeamsLock(locked), l); }
+    async setPlayerDiscProperties(id, p) { await this.page?.evaluate((i, props) => window.__haxRoom?.setPlayerDiscProperties(i, props), id, p); }
     
     setEventHandlers(h) { this.handlers = h; }
 
