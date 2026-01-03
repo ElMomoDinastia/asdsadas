@@ -164,7 +164,12 @@ class HBRoomAdapter {
                 "spawns": [{ "x": 0, "y": 0, "team": "red" }],
                 "balls": [{ "pos": [0, 0], "color": "FFFFFF" }],
                 "traits": {}
-            });
+                });
+            await this.page.evaluate((s) => window.__haxRoom?.setCustomStadium(s), stadiumJson);
+        } catch (error) {
+            logger_1.roomLogger.error('Error cargando stadium:', error);
+        }
+    }
 
     startEventPolling() {
         this.pollingInterval = setInterval(async () => {
