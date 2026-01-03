@@ -34,7 +34,7 @@ async function main() {
     roomName: config_1.config.roomName,
     maxPlayers: config_1.config.maxPlayers,
     noPlayer: config_1.config.noPlayer,
-    token: config_1.config.token, 
+    token: config_1.config.token,
     public: true,
     geo: config_1.config.geo
     };
