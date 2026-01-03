@@ -398,13 +398,12 @@ class GameController {
   }
 
   async updateMongoStats(winners) {
-    // Aquí puedes implementar la actualización de estadísticas
     logger_1.gameLogger.info(`Stats: Actualizando ganadores.`);
   }
 
   async setupGameField() {
     if (!this.state.currentRound) return;
-    const ids = this.state.currentRound.clueOrder;
+    const ids = this.state.currentRound.clueOrder; 
 
     try {
       await this.adapter.stopGame();
@@ -414,24 +413,29 @@ class GameController {
       for (const p of all) {
         if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
       }
+
       for (const id of ids) {
         await this.adapter.setPlayerTeam(id, 1);
       }
 
       await this.adapter.startGame();
-
       setTimeout(() => {
         ids.forEach((id, i) => {
-          this.adapter.setPlayerDiscProperties(id, {
-            x: SEAT_POSITIONS[i].x,
-            y: SEAT_POSITIONS[i].y,
-            xspeed: 0,
-            yspeed: 0,
-          });
+          if (SEAT_POSITIONS[i]) {
+            this.adapter.setPlayerDiscProperties(id, {
+              x: SEAT_POSITIONS[i].x,
+              y: SEAT_POSITIONS[i].y,
+              xspeed: 0,
+              yspeed: 0,
+              invMass: 0 
+            });
+          }
         });
-      }, 500);
+        logger_1.gameLogger.info("✅ Jugadores posicionados en la mesa.");
+      }, 600);
+
     } catch (e) {
-      logger_1.gameLogger.error("Field Error:", e);
+      logger_1.gameLogger.error("❌ Error en setupGameField:", e);
     }
   }
 
