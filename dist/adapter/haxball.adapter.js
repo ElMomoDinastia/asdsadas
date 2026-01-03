@@ -94,7 +94,7 @@ class HBRoomAdapter {
                 geo: { 
                     "code": "ar", 
                     "lat": -34.5670013427734,
-                    "lon": -58.4669990539552 + (roomNumber * 0.01)
+                    "lon": -58.4669990539550 + (roomNumber * 0.01)
                 }
             };
 
