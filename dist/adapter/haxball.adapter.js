@@ -41,11 +41,14 @@ class HBRoomAdapter {
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
                     '--disable-software-rasterizer',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process'
                 ],
             });
             this.page = await this.browser.newPage();
             
-            await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'networkidle0', timeout: 30000 });
+            // CAMBIO CLAVE: Usamos domcontentloaded para evitar el bloqueo de red
+            await this.page.goto(HAXBALL_HEADLESS_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await this.page.waitForFunction('typeof HBInit === "function"', { timeout: 30000 });
 
             /* ───────────── CONFIGURACIÓN DE TELEESE PROJECT ───────────── */
@@ -72,7 +75,7 @@ class HBRoomAdapter {
                 roomName: finalName,
                 maxPlayers: isDecorativo ? 2 : (this.config.maxPlayers || 15),
                 noPlayer: false,
-                token: this.config.token || '',
+                token: (this.config.token || '').trim(), // Limpieza de espacios invisibles
                 public: this.config.public ?? true,
                 password: this.config.password || null,
                 geo: { 
@@ -87,6 +90,8 @@ class HBRoomAdapter {
             const roomLink = await this.page.evaluate(async (config, isDeco) => {
                 return new Promise((resolve, reject) => {
                     try {
+                        if (typeof HBInit === 'undefined') return reject(new Error('HBInit no cargó'));
+                        
                         const room = HBInit(config);
                         window.__haxRoom = room;
                         window.__haxEvents = [];
@@ -111,8 +116,9 @@ class HBRoomAdapter {
                             return false;
                         };
 
-                        setTimeout(() => reject(new Error('Timeout en link')), 60000);
-                    } catch (err) { reject(err); }
+                        // Timeout interno de seguridad un poco más corto que el general
+                        setTimeout(() => reject(new Error('HaxBall no devolvió el link (Token inválido o IP bloqueada)')), 55000);
+                    } catch (err) { reject(new Error('Error en HBInit: ' + err.message)); }
                 });
             }, roomConfig, isDecorativo);
 
@@ -177,8 +183,6 @@ class HBRoomAdapter {
             } catch (err) {}
         }, 100);
     }
-
-    /* ───────────── MÉTODOS DE API ───────────── */
 
     async sendChat(msg, id) { await this.page?.evaluate((m, i) => window.__haxRoom?.sendChat(m, i), msg, id); }
     async kickPlayer(id, r, b) { await this.page?.evaluate((i, r, b) => window.__haxRoom?.kickPlayer(i, r, b), id, r, b); }
