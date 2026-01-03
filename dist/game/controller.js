@@ -400,50 +400,58 @@ class GameController {
   async updateMongoStats(winners) {
     logger_1.gameLogger.info(`Stats: Actualizando ganadores.`);
   }
-
-  async setupGameField() {
-    if (!this.state.currentRound) return;
-    const ids = this.state.currentRound.clueOrder; 
-
-    try {
-      await this.adapter.stopGame();
-      await this.adapter.setTeamsLock(true);
-
-      const all = await this.adapter.getPlayerList();
-      for (const p of all) {
-        if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
-      }
-
-      for (const id of ids) {
-        await this.adapter.setPlayerTeam(id, 1);
-      }
-
-      await this.adapter.startGame();
-
-      setTimeout(() => {
-        ids.forEach((id, i) => {
-          if (SEAT_POSITIONS[i]) {
-            this.adapter.setPlayerDiscProperties(id, {
-              x: SEAT_POSITIONS[i].x,
-              y: SEAT_POSITIONS[i].y,
-              xspeed: 0,
-              yspeed: 0,
-              xgravity: 0,
-              ygravity: 0,
-              invMass: 0,    
-              bCoef: 0,      
-              radius: 15,    
-              cMask: ["all"] 
-            });
-          }
-        });
-        logger_1.gameLogger.info("✅ Jugadores CONGELADOS en sus asientos.");
-      }, 200);
-
-    } catch (e) {
-      logger_1.gameLogger.error("❌ Error en setupGameField:", e);
+    async setupGameField() {
+        if (!this.state.currentRound)
+            return;
+        try {
+            const roundPlayerIds = [
+                ...this.state.currentRound.normalPlayerIds,
+                this.state.currentRound.impostorId,
+            ];
+            logger_1.gameLogger.info({ playerCount: roundPlayerIds.length, playerIds: roundPlayerIds }, 'Setting up game field');
+            await this.adapter.setTeamsLock(true);
+            logger_1.gameLogger.info('Teams locked');
+            await this.adapter.stopGame();
+            await new Promise(resolve => setTimeout(resolve, 100));
+            const allPlayers = await this.adapter.getPlayerList();
+            for (const player of allPlayers) {
+                if (player.id !== 0) {
+                    await this.adapter.setPlayerTeam(player.id, 0);
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+            logger_1.gameLogger.info('All players moved to spectators');
+            for (const playerId of roundPlayerIds) {
+                await this.adapter.setPlayerTeam(playerId, 1);
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            logger_1.gameLogger.info('Round players moved to red team');
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await this.adapter.startGame();
+            logger_1.gameLogger.info('Game started');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            for (let i = 0; i < roundPlayerIds.length && i < SEAT_POSITIONS.length; i++) {
+                const playerId = roundPlayerIds[i];
+                const seat = SEAT_POSITIONS[i];
+                await this.adapter.setPlayerDiscProperties(playerId, {
+                    x: seat.x,
+                    y: seat.y,
+                    xspeed: 0,
+                    yspeed: 0,
+                });
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            logger_1.gameLogger.info({ playerCount: roundPlayerIds.length }, 'All players positioned in seats');
+        }
+        catch (error) {
+            logger_1.gameLogger.error({ error }, 'Failed to setup game field');
+        }
     }
-  }
+    isPlayerInRound(playerId) {
+        if (!this.state.currentRound)
+            return false;
+        return this.state.currentRound.clueOrder.includes(playerId);
+    }
 
   containsSpoiler(clue, foot) {
     if (!foot) return false;
