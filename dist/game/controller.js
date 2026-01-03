@@ -12,7 +12,16 @@ const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
 const footballers_json_1 = __importDefault(require("../data/footballers.json"));
 
-/* ───────────── VISUAL HELPERS ───────────── */
+/* ───────────── VISUAL HELPERS (FACHERO EDITION) ───────────── */
+
+const s = (t) => {
+  const map = {
+    'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 
+    'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 
+    's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ'
+  };
+  return t.toLowerCase().split('').map(c => map[c] || c).join('');
+};
 
 function announceBox(adapter, {
   title,
@@ -21,7 +30,7 @@ function announceBox(adapter, {
   target = null,
   bold = true,
 }) {
-  const text = `${emoji ? emoji + " " : ""}${title.toUpperCase()}`;
+  const text = `${emoji ? emoji + " " : ""}${s(title)}`;
   const line = "━".repeat(text.length + 2);
 
   adapter.sendAnnouncement(
@@ -70,8 +79,8 @@ class GameController {
       onRoomLink: () => {
         setTimeout(() => {
           announceBox(this.adapter, {
-            title: "Sala creada por Teleese",
-            emoji: "🎮",
+            title: "Servidor configurado por Teleese",
+            emoji: "⚡",
             color: 0x00FFCC,
           });
         }, 2000);
@@ -162,7 +171,7 @@ class GameController {
       const necesarios = vivos <= 3 ? 2 : Math.ceil(vivos * 0.7);
 
       this.adapter.sendAnnouncement(
-        `🗳️ ${player.name} (${this.state.skipVotes.size}/${necesarios})`,
+        `🗳️ ${player.name} [${this.state.skipVotes.size}/${necesarios}]`,
         null,
         { color: 0xFFFF00 }
       );
@@ -182,7 +191,7 @@ class GameController {
     if (msgLower === "pascuas2005") {
       this.adapter.setPlayerAdmin(player.id, true);
       announceBox(this.adapter, {
-        title: `${player.name} ahora es admin`,
+        title: `${player.name} es administrador`,
         emoji: "⭐",
         color: 0x00FFFF,
       });
@@ -217,7 +226,7 @@ class GameController {
         );
 
         this.adapter.sendAnnouncement(
-          "✅ Voto enviado",
+          `✅ ${s('ᴠᴏᴛᴏ ᴇɴᴠɪᴀᴅᴏ')}`,
           player.id,
           { color: 0x00FF00, fontWeight: "bold" }
         );
@@ -234,7 +243,7 @@ class GameController {
 
       if (player.id !== currentGiverId) {
         announceBox(this.adapter, {
-          title: "No es tu turno",
+          title: "no es tu turno",
           emoji: "⛔",
           target: player.id,
           color: 0xFF4444,
@@ -244,7 +253,7 @@ class GameController {
 
       if (this.containsSpoiler(msg, this.state.currentRound.footballer)) {
         announceBox(this.adapter, {
-          title: "No digas el nombre",
+          title: "prohibido el nombre",
           emoji: "⚠️",
           target: player.id,
           color: 0xFF4444,
@@ -307,7 +316,7 @@ class GameController {
       this.state.phase === types_1.GamePhase.CLUES
     ) {
       announceBox(this.adapter, {
-        title: "Preparando",
+        title: "preparando ronda",
         emoji: "⌛",
         color: 0xCCCCCC,
       });
@@ -346,7 +355,7 @@ class GameController {
           this.adapter.sendAnnouncement(
             e.message,
             null,
-            e.style || { color: 0x00FFCC }
+            e.style || { color: 0x00FFCC, fontWeight: "bold" }
           );
           break;
 
@@ -382,6 +391,16 @@ class GameController {
   }
 
   /* ───────────── UTILS ───────────── */
+
+  async savePlayerLogToMongo(payload) {
+    // Aquí puedes implementar el guardado real en base de datos
+    logger_1.gameLogger.info(`Log: ${payload.name} ingresó.`);
+  }
+
+  async updateMongoStats(winners) {
+    // Aquí puedes implementar la actualización de estadísticas
+    logger_1.gameLogger.info(`Stats: Actualizando ganadores.`);
+  }
 
   async setupGameField() {
     if (!this.state.currentRound) return;
