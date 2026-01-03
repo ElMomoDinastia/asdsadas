@@ -11,6 +11,17 @@
     const logger_1 = require("../utils/logger");
     const config_1 = require("../config");
     const footballers_json_1 = __importDefault(require("../data/footballers.json"));
+
+     /* ───────────── CONFIGURACIÓN GLOBAL ───────────── */
+    const RANGOS = [
+    { name: "MUDO", tag: "MDO", minXp: 0, emoji: "😶", color: 0xCCCCCC },
+    { name: "TERMO", tag: "TRM", minXp: 500, emoji: "🧉", color: 0xFF8C00 },
+    { name: "COBRISTA", tag: "CBR", minXp: 1500, emoji: "🐍", color: 0x44FF44 },
+    { name: "TEISTA", tag: "412", minXp: 3000, emoji: "🛰️", color: 0xFFFF00 },
+    { name: "AGUSNETA", tag: "AGU", minXp: 6000, emoji: "🏎️", color: 0x00FFFF },
+    { name: "SABIO DE RED", tag: "SDR", minXp: 10000, emoji: "🕵️", color: 0xFF00FF },
+    { name: "DAVO", tag: "DAV", minXp: 20000, emoji: "📑", color: 0xFFD700 }
+    ];
     
 
     
@@ -150,16 +161,7 @@
         }
       }
     
-     /* ───────────── CONFIGURACIÓN GLOBAL ───────────── */
-const RANGOS = [
-    { name: "MUDO", tag: "MDO", minXp: 0, emoji: "😶", color: 0xCCCCCC },
-    { name: "TERMO", tag: "TRM", minXp: 500, emoji: "🧉", color: 0xFF8C00 },
-    { name: "COBRISTA", tag: "CBR", minXp: 1500, emoji: "🐍", color: 0x44FF44 },
-    { name: "TEISTA", tag: "412", minXp: 3000, emoji: "🛰️", color: 0xFFFF00 },
-    { name: "AGUSNETA", tag: "AGU", minXp: 6000, emoji: "0x00FFFF", color: 0x00FFFF },
-    { name: "SABIO DE RED", tag: "SDR", minXp: 10000, emoji: "🕵️", color: 0xFF00FF },
-    { name: "DAVO", tag: "DAV", minXp: 20000, emoji: "📑", color: 0xFFD700 }
-];
+
 
 /* ───────────── HELPER DE RANGOS ───────────── */
 getRangeInfo(xp) {
