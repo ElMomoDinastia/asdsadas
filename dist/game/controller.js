@@ -66,22 +66,23 @@
 
     /* ───────────── CONTROLLER ───────────── */
     
-    class GameController {
-      constructor(adapter, footballers) {
-        this.adapter = adapter;
-    
-        this.state = (0, types_1.createInitialState)({
-          clueTimeSeconds: config_1.config.clueTime,
-          discussionTimeSeconds: config_1.config.discussionTime,
-          votingTimeSeconds: config_1.config.votingTime,
-        });
-    
-        this.footballers = footballers ?? footballers_json_1.default;
-        this.phaseTimer = null;
-        this.assignDelayTimer = null;
-    
-        this.setupEventHandlers();
-      }
+constructor(adapter, footballers, db) { // <--- Agregamos 'db' aquí
+    this.adapter = adapter;
+    this.db = db; 
+
+    this.state = (0, types_1.createInitialState)({
+        clueTimeSeconds: config_1.config.clueTime,
+        discussionTimeSeconds: config_1.config.discussionTime,
+        votingTimeSeconds: config_1.config.votingTime,
+    });
+
+    this.footballers = footballers ?? footballers_json_1.default;
+    this.phaseTimer = null;
+    this.assignDelayTimer = null;
+    this.skipVotes = new Set(); 
+
+    this.setupEventHandlers();
+}
     
       /* ───────────── EVENTS ───────────── */
     
@@ -269,7 +270,40 @@ async handlePlayerChat(player, message) {
 
     return false; // Para que nadie vea la contraseña en el chat
 }
+
+
+    /* ───────────── COMANDO PARA SALTAR DEBATE ───────────── */
+this.skipVotes = new Set(); // Guardamos IDs de jugadores que quieren saltar
+
+if (msgLower === "!votar" || msgLower === "!skip") {
+    const round = this.state.currentRound;
     
+    if (this.state.phase !== types_1.GamePhase.DISCUSSION) {
+        this.adapter.sendAnnouncement("⚠️ Solo podés usar !votar durante el debate.", player.id, { color: 0xFF4444 });
+        return false;
+    }
+
+    // 2. Validar que el jugador esté participando y vivo
+    if (!this.isPlayerInRound(player.id)) {
+        this.adapter.sendAnnouncement("❌ Solo los jugadores activos pueden votar.", player.id, { color: 0xFF4444 });
+        return false;
+    }    this.skipVotes.add(player.id);
+
+    const vivos = round.clueOrder.length;
+    const requeridos = Math.floor(vivos / 2) + 1;
+    const actuales = this.skipVotes.size;
+
+    this.adapter.sendAnnouncement(`🗳️ ${player.name} quiere votar [${actuales}/${requeridos}]`, null, { color: 0x00FFCC });
+
+    // 4. Si se llega a la mayoría, saltar fase
+    if (actuales >= requeridos) {
+        this.adapter.sendAnnouncement("⏩ Mayoría alcanzada. Saltando a la votación...", null, { color: 0xFFFF00, fontWeight: "bold" });
+        this.skipVotes.clear(); // Limpiamos para la próxima
+        this.applyTransition((0, state_machine_1.transition)(this.state, { type: "END_DISCUSSION" }));
+    }
+
+    return false;
+}
 
     /* ───────────── LÓGICA DE JUEGO ───────────── */
 
@@ -300,29 +334,41 @@ async handlePlayerChat(player, message) {
 
     /* ───────────── SISTEMA DE VOTOS Y PISTAS ───────────── */
 
-    if (this.state.phase === types_1.GamePhase.VOTING && isPlaying) {
-        const voteNum = parseInt(msg);
-        const order = this.state.currentRound?.clueOrder ?? [];
-        if (!isNaN(voteNum) && voteNum > 0 && voteNum <= order.length) {
-            const votedId = order[voteNum - 1];
-            this.applyTransition((0, state_machine_1.transition)(this.state, { type: "SUBMIT_VOTE", playerId: player.id, votedId }));
-            this.adapter.sendAnnouncement(`✅ ${s('ᴠᴏᴛᴏ ᴇɴᴠɪᴀᴅᴏ')}`, player.id, { color: 0x00FF00 });
-        }
-        return false;
+if (this.state.phase === types_1.GamePhase.VOTING && isPlaying) {
+    const voteNum = parseInt(msg);
+    const order = this.state.currentRound?.clueOrder ?? [];
+    if (!isNaN(voteNum) && voteNum > 0 && voteNum <= order.length) {
+        const votedId = order[voteNum - 1];
+        this.applyTransition((0, state_machine_1.transition)(this.state, { type: "SUBMIT_VOTE", playerId: player.id, votedId }));
+        this.adapter.sendAnnouncement(`✅ ${s('ᴠᴏᴛᴏ ᴇɴᴠɪᴀᴅᴏ')}`, player.id, { color: 0x00FF00 });
     }
+    return false;
+}
 
-    if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
-        const currentGiverId = this.state.currentRound.clueOrder[this.state.currentRound.currentClueIndex];
-        if (player.id === currentGiverId) {
-            if (this.containsSpoiler(msg, this.state.currentRound.footballer)) {
-                announceBox(this.adapter, { title: "prohibido el nombre", emoji: "⚠️", target: player.id, color: 0xFF4444 });
-                return false;
-            }
-            this.applyTransition((0, state_machine_1.transition)(this.state, { type: "SUBMIT_CLUE", playerId: player.id, clue: msg }));
+if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
+    const round = this.state.currentRound;
+    const currentGiverId = round.clueOrder[round.currentClueIndex];
+
+    if (player.id === currentGiverId) {
+        if (this.containsSpoiler(msg, round.footballer)) {
+            announceBox(this.adapter, { title: "prohibido el nombre", emoji: "⚠️", target: player.id, color: 0xFF4444 });
             return false;
         }
+        this.applyTransition((0, state_machine_1.transition)(this.state, { type: "SUBMIT_CLUE", playerId: player.id, clue: msg }));
+        return false;
+    } 
+    
+    else {
+        const text = "NO ES TU TURNO";
+        const line = "━".repeat(text.length + 2);
+        this.adapter.sendAnnouncement(
+            `┏${line}┓\n  ⚠️ ${text}\n┗${line}┛`, 
+            player.id, 
+            { color: 0xFF0000, fontWeight: "bold" }
+        );
+        return false; 
     }
-
+}
     /* ───────────── CHAT FINAL CON COLOR DE RANGO ───────────── */
 
     const prefix = player.admin ? `⭐ ${range.emoji}` : range.emoji;
