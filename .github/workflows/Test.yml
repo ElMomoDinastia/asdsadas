@@ -5,7 +5,12 @@ on:
     branches: [ main ]
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *' # Se ejecuta cada 6 horas
+
+# ESTO BLOQUEA LOS DUPLICADOS AUTOMÁTICAMENTE
+concurrency:
+  group: haxball-${{ matrix.room_id }}
+  cancel-in-progress: true
 
 jobs:
   deploy-room:
@@ -32,25 +37,21 @@ jobs:
 
       - name: Ejecutar y Programar Relevo
         env:
-          # Identificación de la sala
           ROOM_ID: ${{ matrix.room_id }}
-          
-          # Lógica de roles para el Adapter
           IS_HEADER: ${{ matrix.room_id == 0 }}
           IS_FOOTER: ${{ matrix.room_id == 7 }}
-          
-          # Secretos y Config
           HAXBALL_TOKEN: ${{ secrets[format('TOKEN_{0}', matrix.room_id)] }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MONGO_URI: ${{ secrets.MONGO_URI }}
           NODE_ENV: production
         run: |
-          # Programar el re-lanzamiento antes de que termine el timeout
-          (sleep 20700 && curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/$(basename ${{ github.workflow }}).yml/dispatches \
-            -d '{"ref":"main"}') &
+          # Solo programamos el relevo si NO es un disparo manual para evitar bucles
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            (sleep 20700 && curl -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/${{ github.repository }}/actions/workflows/main.yml/dispatches \
+              -d '{"ref":"main"}') &
+          fi
 
-          # Iniciar el bot (6 horas de duración)
           timeout 21600s npm start || true
