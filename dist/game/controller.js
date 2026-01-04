@@ -485,74 +485,81 @@ async updatePlayerMatch(auth, name, isWin, role) {
   }
 
  /* ───────────── DB & MISIONES REALES ───────────── */
-
-  async getPlayerStats(auth, name) {
+async getPlayerStats(auth, name) {
     try {
-      if (!this.db || this.db.readyState !== 1) {
+        // En Mongoose, verificamos que la conexión esté abierta (1 = connected)
+        if (!this.db || this.db.readyState !== 1) {
+            console.error("❌ DB no conectada. Estado:", this.db?.readyState);
+            return { auth, name, wins: 0, losses: 0, xp: 0, missionLevel: 1, missionProgress: 0 };
+        }
+
+        // IMPORTANTE: Usamos this.db.db para acceder al driver nativo
+        const collection = this.db.db.collection('players');
+        let stats = await collection.findOne({ auth });
+
+        if (!stats) {
+            stats = { 
+                auth, 
+                name, 
+                wins: 0, 
+                losses: 0, 
+                xp: 0, 
+                missionLevel: 1, 
+                missionProgress: 0,
+                updatedAt: new Date() 
+            };
+            await collection.insertOne(stats);
+            console.log(`✨ Nuevo jugador registrado: ${name}`);
+        } else {
+            // Actualizamos el nombre por si se lo cambió en Haxball
+            await collection.updateOne({ auth }, { $set: { name, updatedAt: new Date() } });
+        }
+        return stats;
+    } catch (e) {
+        logger_1.gameLogger.error("Error en getPlayerStats:", e);
         return { auth, name, wins: 0, losses: 0, xp: 0, missionLevel: 1, missionProgress: 0 };
-      }
-
-      const collection = this.db.collection('players');
-      let stats = await collection.findOne({ auth });
-
-      if (!stats) {
-        stats = { 
-          auth, 
-          name, 
-          wins: 0, 
-          losses: 0, 
-          xp: 0, 
-          missionLevel: 1, 
-          missionProgress: 0,
-          updatedAt: new Date() 
-        };
-        await collection.insertOne(stats);
-      } else {
-        // Actualizamos el nombre por si se lo cambió en Haxball
-        await collection.updateOne({ auth }, { $set: { name, updatedAt: new Date() } });
-      }
-      return stats;
-    } catch (e) {
-      logger_1.gameLogger.error("Error en getPlayerStats:", e);
-      return { auth, name, wins: 0, losses: 0, xp: 0, missionLevel: 1, missionProgress: 0 };
     }
-  }
+}
 
-  async savePlayerStatsToMongo(auth, stats) {
+async savePlayerStatsToMongo(auth, stats) {
     try {
-      if (!this.db || this.db.readyState !== 1) return;
-      await this.db.collection('players').updateOne(
-        { auth }, 
-        { $set: { ...stats, updatedAt: new Date() } }, 
-        { upsert: true }
-      );
+        if (!this.db || this.db.readyState !== 1) return;
+        
+        // Usamos this.db.db.collection
+        await this.db.db.collection('players').updateOne(
+            { auth }, 
+            { $set: { ...stats, updatedAt: new Date() } }, 
+            { upsert: true }
+        );
     } catch (e) {
-      logger_1.gameLogger.error("Error en savePlayerStatsToMongo:", e);
+        logger_1.gameLogger.error("Error en savePlayerStatsToMongo:", e);
     }
-  }
+}
 
-  async getTopPlayers(limit) {
+async getTopPlayers(limit) {
     try {
-      if (!this.db || this.db.readyState !== 1) return [{ name: "Sin DB", xp: 0 }];
-      return await this.db.collection('players')
-        .find({})
-        .sort({ xp: -1 })
-        .limit(limit)
-        .toArray();
+        if (!this.db || this.db.readyState !== 1) return [{ name: "Sin DB", xp: 0 }];
+        
+        // Usamos this.db.db.collection
+        return await this.db.db.collection('players')
+            .find({})
+            .sort({ xp: -1 })
+            .limit(limit)
+            .toArray();
     } catch (e) {
-      return [];
+        return [];
     }
-  }
+}
 
-  async savePlayerLogToMongo(payload) {
+async savePlayerLogToMongo(payload) {
     try {
-      if (this.db && this.db.readyState === 1) {
-        await this.db.collection('logs').insertOne({ ...payload, timestamp: new Date() });
-      }
+        if (this.db && this.db.readyState === 1) {
+            await this.db.db.collection('logs').insertOne({ ...payload, timestamp: new Date() });
+        }
     } catch (e) {
-      logger_1.gameLogger.error("Error guardando log:", e);
+        logger_1.gameLogger.error("Error guardando log:", e);
     }
-  }
+}
 
   async setupGameField() {
     if (!this.state.currentRound) return;
