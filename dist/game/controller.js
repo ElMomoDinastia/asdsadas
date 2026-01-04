@@ -66,24 +66,21 @@
 
     /* ───────────── CONTROLLER ───────────── */
     
-constructor(adapter, footballers, db) { // <--- Agregamos 'db' aquí
-    this.adapter = adapter;
-    this.db = db; 
-
-    this.state = (0, types_1.createInitialState)({
-        clueTimeSeconds: config_1.config.clueTime,
-        discussionTimeSeconds: config_1.config.discussionTime,
-        votingTimeSeconds: config_1.config.votingTime,
-    });
-
-    this.footballers = footballers ?? footballers_json_1.default;
-    this.phaseTimer = null;
-    this.assignDelayTimer = null;
-    this.skipVotes = new Set(); 
-
-    this.setupEventHandlers();
-}
-    
+class GameController {
+    constructor(adapter, footballers, db) {
+        this.adapter = adapter;
+        this.db = db;
+        this.state = (0, types_1.createInitialState)({
+            clueTimeSeconds: config_1.config.clueTime,
+            discussionTimeSeconds: config_1.config.discussionTime,
+            votingTimeSeconds: config_1.config.votingTime,
+        });
+        this.footballers = footballers ?? footballers_json_1.default;
+        this.phaseTimer = null;
+        this.assignDelayTimer = null;
+        this.skipVotes = new Set();
+        this.setupEventHandlers();
+    }  
       /* ───────────── EVENTS ───────────── */
     
       setupEventHandlers() {
