@@ -194,50 +194,43 @@ async handlePlayerChat(player, message) {
     const msgLower = msg.toLowerCase();
     const isPlaying = this.isPlayerInRound(player.id);
     
-    const stats = await this.getPlayerStats(player.auth, player.name);
+    // CORRECCIÓN: En Map se usa .get(id). Si no existe, usamos el objeto player directo.
+    const roomPlayer = this.state.players.get(player.id);
+    const validAuth = roomPlayer ? roomPlayer.auth : player.auth;
+    const validName = roomPlayer ? roomPlayer.name : player.name;
+
+    // Pedimos stats frescas de la DB
+    const stats = await this.getPlayerStats(validAuth, validName);
     const range = this.getRangeInfo(stats.xp);
 
     /* ───────────── COMANDOS INFORMATIVOS ───────────── */
-
     if (msgLower === "!help") {
         this.adapter.sendAnnouncement("▌ ◢◤━  𝐀𝐘𝐔𝐃𝐀  ━◥◣ ▐", player.id, { color: 0xFFFF00, fontWeight: 'bold' });
         this.adapter.sendAnnouncement("» !𝐦𝐞        : 𝐕𝐞𝐫 𝐭𝐮 𝐩𝐫𝐞𝐟𝐢𝐥, 𝐫𝐚𝐧𝐠𝐨 𝐲 𝐦𝐢𝐬𝐢𝐨𝐧𝐞𝐬.", player.id);
         this.adapter.sendAnnouncement("» !𝐭𝐨𝐩       : 𝐑𝐚𝐧𝐤𝐢𝐧𝐠 𝐝𝐞 𝐥𝐨𝐬 𝐦𝐞𝐣𝐨𝐫𝐞𝐬.", player.id);
         this.adapter.sendAnnouncement("» !𝐫𝐚𝐧𝐠𝐨𝐬    : 𝐕𝐞𝐫 𝐭𝐨𝐝𝐚𝐬 𝐥𝐚𝐬 𝐣𝐞𝐫𝐚𝐫𝐪𝐮𝐢𝐚𝐬.", player.id);
-        this.adapter.sendAnnouncement("» !𝐜𝐨𝐦𝐨𝐣𝐮𝐠𝐚𝐫 : 𝐓𝐮𝐭𝐨𝐫𝐢𝐚𝐥 𝐝𝐞𝐥 𝐣𝐮𝐞𝐠𝐨.", player.id);
-        this.adapter.sendAnnouncement("» !𝐩𝐚𝐥𝐚𝐛𝐫𝐚   : 𝐕𝐞𝐫 𝐪𝐮𝐞́ 𝐣𝐮𝐠𝐚𝐝𝐨𝐫 𝐭𝐞 𝐭𝐨𝐜𝐨́.", player.id);
-        this.adapter.sendAnnouncement("» !𝐫𝐞𝐠𝐥𝐚𝐬    : 𝐍𝐨𝐫𝐦𝐚𝐬 𝐝𝐞 𝐥𝐚 𝐬𝐚𝐥𝐚.", player.id);
         return false;
     }
 
-    if (msgLower === "!rangos") {
-        announceBox(this.adapter, { title: "TABLA DE RANGOS", emoji: "🏆", color: 0xFFD700, target: player.id });
-        RANGOS.forEach(r => {
-            const isCurrent = range.name === r.name ? " ◄ (𝐓𝐮 𝐑𝐚𝐧𝐠𝐨)" : "";
-            this.adapter.sendAnnouncement(`${r.emoji} ${r.name.padEnd(12)} ➔ ${r.minXp.toLocaleString()} XP${isCurrent}`, player.id, { color: r.color });
-        });
-        return false;
-    }
-
-   if (msgLower === "!me") {
+    if (msgLower === "!me") {
         const filled = Math.floor(range.percent / 10);
         const bar = "🟦".repeat(filled) + "⬛".repeat(10 - filled);
-
-        // --- CÁLCULO DE MISIÓN ESCALABLE ---
-        const reqDinamico = stats.missionLevel * 2; // Pide 2 victorias más por cada nivel
+        const reqDinamico = stats.missionLevel * 2;
         const tipoMision = stats.missionLevel % 2 === 0 ? 'IMPOSTOR' : 'CIVIL';
-        const recompensa = stats.missionLevel * 150; // La recompensa sube con el nivel
 
-        announceBox(this.adapter, { title: `PERFIL: ${player.name.toUpperCase()}`, emoji: "👤", color: range.color, target: player.id });
+        announceBox(this.adapter, { 
+            title: `PERFIL: ${stats.name.toUpperCase()}`, 
+            emoji: range.emoji, 
+            color: range.color, 
+            target: player.id 
+        });
         this.adapter.sendAnnouncement(`🎖️ ${s('ʀᴀɴɢᴏ')}: [${range.emoji} ${range.name}]`, player.id, { color: range.color });
         this.adapter.sendAnnouncement(`📈 ${s('ᴘʀᴏɢʀᴇꜱᴏ')}: [${bar}] ${range.percent}%`, player.id);
         this.adapter.sendAnnouncement(`✨ XP: ${stats.xp} | 🏆 Wins: ${stats.wins || 0}`, player.id);
-        
-        this.adapter.sendAnnouncement(`\n🎯 ${s('ᴍɪꜱɪᴏɴ ᴀᴄᴛɪᴠᴀ')} (Niv. ${stats.missionLevel}):`, player.id, { color: 0xFFFF00 });
-        this.adapter.sendAnnouncement(`── Ganar como ${tipoMision} [${stats.missionProgress}/${reqDinamico}]`, player.id);
-        this.adapter.sendAnnouncement(`── Bono al completar: +${recompensa} XP`, player.id, { color: 0x00FF00 });
+        this.adapter.sendAnnouncement(`🎯 Misión: Ganar como ${tipoMision} [${stats.missionProgress}/${reqDinamico}]`, player.id, { color: 0xFFFF00 });
         return false;
     }
+    
 
     if (msgLower === "!debugdb") {
         const status = this.db ? this.db.readyState : "NULL";
@@ -359,6 +352,14 @@ if (this.state.phase === types_1.GamePhase.VOTING && isPlaying) {
     return false;
 }
 
+    if (msgLower === "!rangos") {
+        this.adapter.sendAnnouncement("📋 𝐉𝐄𝐑𝐀𝐑𝐐𝐔𝐈𝐀𝐒 𝐃𝐄𝐋 𝐒𝐄𝐑𝐕𝐈𝐃𝐎𝐑:", player.id, { color: 0xFFFFFF, fontWeight: 'bold' });
+        RANGOS.forEach(r => {
+            this.adapter.sendAnnouncement(`${r.emoji} ${r.name}: ${r.minXp} XP`, player.id, { color: r.color });
+        });
+        return false;
+    }
+
 if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
     const round = this.state.currentRound;
     const currentGiverId = round.clueOrder[round.currentClueIndex];
@@ -382,25 +383,26 @@ if (msgLower === "!reglas") {
         return false;
     }
 
-    const prefix = player.admin ? `⭐ ${range.emoji}` : range.emoji;
+const prefix = player.admin ? `⭐ ${range.emoji}` : range.emoji;
     const chatColor = player.admin ? 0x00FFFF : range.color;
 
     if (isPlaying) {
+        // Mensaje global para los que están en la ronda
         this.adapter.sendAnnouncement(`${prefix} ${player.name}: ${msg}`, null, { 
             color: chatColor, 
             fontWeight: stats.xp >= 6000 ? 'bold' : 'normal' 
         });
     } else {
-        this.adapter.getPlayerList().then(players => {
-            players.forEach(p => {
-                if (!this.isPlayerInRound(p.id)) {
-                    this.adapter.sendAnnouncement(`👀 ${player.name}: ${msg}`, p.id, { color: 0xCCCCCC });
-                }
-            });
+        // Chat para espectadores
+        const allPlayers = await this.adapter.getPlayerList();
+        allPlayers.forEach(p => {
+            if (!this.isPlayerInRound(p.id)) {
+                this.adapter.sendAnnouncement(`👀 ${prefix} ${player.name}: ${msg}`, p.id, { color: 0xCCCCCC });
+            }
         });
     }
     return false;
-} 
+}
 /* ───────────── MÉTODOS DE SISTEMA ───────────── */
 
 async checkForTakeover() {
