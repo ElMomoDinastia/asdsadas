@@ -275,33 +275,39 @@ async handlePlayerChat(player, message) {
 
     return false; // Para que nadie vea la contraseña en el chat
 }
-    /* ───────────── COMANDO PARA SALTAR DEBATE ───────────── */
-this.skipVotes = new Set(); // Guardamos IDs de jugadores que quieren saltar
 
 if (msgLower === "!votar" || msgLower === "!skip") {
-    const round = this.state.currentRound;
-    
+    // 1. Validar que estemos en debate
     if (this.state.phase !== types_1.GamePhase.DISCUSSION) {
         this.adapter.sendAnnouncement("⚠️ Solo podés usar !votar durante el debate.", player.id, { color: 0xFF4444 });
         return false;
     }
 
-    // 2. Validar que el jugador esté participando y vivo
+    // 2. Validar que el jugador esté jugando y vivo
     if (!this.isPlayerInRound(player.id)) {
         this.adapter.sendAnnouncement("❌ Solo los jugadores activos pueden votar.", player.id, { color: 0xFF4444 });
         return false;
-    }    this.skipVotes.add(player.id);
+    }
 
-    const vivos = round.clueOrder.length;
+    // 3. Evitar que el mismo jugador vote dos veces
+    if (this.skipVotes.has(player.id)) {
+        this.adapter.sendAnnouncement("⏳ Ya votaste. Esperá a los demás.", player.id, { color: 0xFFFF00 });
+        return false;
+    }
+
+    // AGREGAR EL VOTO (Ahora sí persiste porque no lo reseteamos arriba)
+    this.skipVotes.add(player.id);
+
+    const vivos = this.state.currentRound.clueOrder.length;
     const requeridos = Math.floor(vivos / 2) + 1;
     const actuales = this.skipVotes.size;
 
-    this.adapter.sendAnnouncement(`🗳️ ${player.name} quiere votar [${actuales}/${requeridos}]`, null, { color: 0x00FFCC });
+    this.adapter.sendAnnouncement(`🗳️ ${player.name} quiere saltar [${actuales}/${requeridos}]`, null, { color: 0x00FFCC });
 
     // 4. Si se llega a la mayoría, saltar fase
     if (actuales >= requeridos) {
         this.adapter.sendAnnouncement("⏩ Mayoría alcanzada. Saltando a la votación...", null, { color: 0xFFFF00, fontWeight: "bold" });
-        this.skipVotes.clear(); // Limpiamos para la próxima
+        this.skipVotes.clear(); 
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: "END_DISCUSSION" }));
     }
 
@@ -419,8 +425,12 @@ async checkForTakeover() {
       /* ───────────── STATE ───────────── */
     
       applyTransition(result) {
-        const prev = this.state.phase;
-        this.state = result.state;
+    const prev = this.state.phase;
+    this.state = result.state;
+
+    if (prev !== this.state.phase) {
+        this.skipVotes.clear();
+    }
     
         if (prev === types_1.GamePhase.VOTING && this.state.phase === types_1.GamePhase.CLUES) {
           announceBox(this.adapter, { title: "preparando ronda", emoji: "⌛", color: 0xCCCCCC });
