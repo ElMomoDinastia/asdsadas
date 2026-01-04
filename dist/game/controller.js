@@ -60,7 +60,6 @@
         { color, fontWeight: bold ? "bold" : "normal" }
       );
     }
-    
 
     /* ───────────── CONTROLLER ───────────── */
     
@@ -276,8 +275,6 @@ async handlePlayerChat(player, message) {
 
     return false; // Para que nadie vea la contraseña en el chat
 }
-
-
     /* ───────────── COMANDO PARA SALTAR DEBATE ───────────── */
 this.skipVotes = new Set(); // Guardamos IDs de jugadores que quieren saltar
 
@@ -310,7 +307,6 @@ if (msgLower === "!votar" || msgLower === "!skip") {
 
     return false;
 }
-
 
  if (msgLower === "!comojugar") {
         this.adapter.sendAnnouncement("▌ ◢◤━  ¿𝐂𝐎𝐌𝐎 𝐉𝐔𝐆𝐀𝐑?  ━◥◣ ▐", player.id, { color: 0x00FF00, fontWeight: 'bold' });
@@ -368,30 +364,18 @@ if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
         }
         this.applyTransition((0, state_machine_1.transition)(this.state, { type: "SUBMIT_CLUE", playerId: player.id, clue: msg }));
         return false;
-    } 
-    
-    else {
-        const text = "NO ES TU TURNO";
-        const line = "━".repeat(text.length + 2);
-        this.adapter.sendAnnouncement(
-            `┏${line}┓\n  ⚠️ ${text}\n┗${line}┛`, 
-            player.id, 
-            { color: 0xFF0000, fontWeight: "bold" }
-        );
+    } else {
+        this.adapter.sendAnnouncement("⚠️ NO ES TU TURNO", player.id, { color: 0xFF0000, fontWeight: "bold" });
         return false; 
     }
-/* ... (dentro de handlePlayerChat, después de !top) ... */
-
-    if (msgLower === "!reglas") {
+}
+if (msgLower === "!reglas") {
         this.adapter.sendAnnouncement("▌ ◢◤━  𝐑𝐄𝐆𝐋𝐀𝐒  ━◥◣ ▐", player.id, { color: 0xFF4444, fontWeight: 'bold' });
-        this.adapter.sendAnnouncement("1. Prohibido decir el nombre del jugador (o parte de él).", player.id);
+        this.adapter.sendAnnouncement("1. Prohibido decir el nombre del jugador.", player.id);
         this.adapter.sendAnnouncement("2. No revelar pistas siendo espectador.", player.id);
-        this.adapter.sendAnnouncement("3. No insultar ni hacer spam de comandos.", player.id);
-        this.adapter.sendAnnouncement("4. El voto debe ser serio para no arruinar la partida.", player.id);
         return false;
     }
 
-    /* ───────────── CHAT FINAL CON COLOR DE RANGO ───────────── */
     const prefix = player.admin ? `⭐ ${range.emoji}` : range.emoji;
     const chatColor = player.admin ? 0x00FFFF : range.color;
 
@@ -400,21 +384,17 @@ if (this.state.phase === types_1.GamePhase.CLUES && isPlaying) {
             color: chatColor, 
             fontWeight: stats.xp >= 6000 ? 'bold' : 'normal' 
         });
-        return false;
-    }
-
-    // Chat espectadores
-    this.adapter.getPlayerList().then(players => {
-        players.forEach(p => {
-            if (!this.isPlayerInRound(p.id)) {
-                this.adapter.sendAnnouncement(`👀 ${player.name}: ${msg}`, p.id, { color: 0xCCCCCC });
-            }
+    } else {
+        this.adapter.getPlayerList().then(players => {
+            players.forEach(p => {
+                if (!this.isPlayerInRound(p.id)) {
+                    this.adapter.sendAnnouncement(`👀 ${player.name}: ${msg}`, p.id, { color: 0xCCCCCC });
+                }
+            });
         });
-    });
-
+    }
     return false;
-} // AQUÍ CIERRA handlePlayerChat CORRECTAMENTE
-
+} 
 /* ───────────── MÉTODOS DE SISTEMA ───────────── */
 
 async checkForTakeover() {
@@ -655,6 +635,7 @@ async savePlayerLogToMongo(payload) {
     setTimeout(() => {
         process.exit(0);
     }, 2000);
-}
+  }
+} 
 
 exports.GameController = GameController;
