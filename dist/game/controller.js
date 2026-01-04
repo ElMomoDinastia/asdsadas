@@ -241,6 +241,13 @@ async handlePlayerChat(player, message) {
         return false;
     }
 
+    if (msgLower === "!debugdb") {
+        const status = this.db ? this.db.readyState : "NULL";
+        const estados = { 0: "❌ Desconectado", 1: "✅ Conectado", 2: "⏳ Conectando", 3: "🔌 Desconectando", "NULL": "🚫 No inicializada" };
+        this.adapter.sendAnnouncement(`🛠️ [DEBUG] Estado DB: ${estados[status] || status}`, player.id, { color: 0xFFFFFF });
+        return false;
+    }
+
     if (msgLower === "!top") {
         const top = await this.getTopPlayers(10);
         this.adapter.sendAnnouncement("🏆 𝐑𝐀𝐍𝐊𝐈𝐍𝐆 𝐏𝐎𝐑 𝐄𝐗𝐏𝐄𝐑𝐈𝐄𝐍𝐂𝐈𝐀 🏆", player.id, { color: 0xFFD700, fontWeight: 'bold' });
@@ -307,10 +314,18 @@ if (msgLower === "!votar" || msgLower === "!skip") {
 
     /* ───────────── LÓGICA DE JUEGO ───────────── */
 
-    if (msgLower === "!comojugar") {
+ if (msgLower === "!comojugar") {
         this.adapter.sendAnnouncement("▌ ◢◤━  ¿𝐂𝐎𝐌𝐎 𝐉𝐔𝐆𝐀𝐑?  ━◥◣ ▐", player.id, { color: 0x00FF00, fontWeight: 'bold' });
-        this.adapter.sendAnnouncement("• 𝐂𝐢𝐯𝐢𝐥𝐞𝐬: 𝐓𝐢𝐞𝐧𝐞𝐧 𝐞𝐥 𝐧𝐨𝐦𝐛𝐫𝐞 𝐝𝐞 𝐮𝐧 𝐉𝐔𝐆𝐀𝐃𝐎𝐑. 𝐃𝐢𝐠𝐚𝐧 𝐜𝐨𝐬𝐚𝐬 𝐫𝐞𝐥𝐚𝐜𝐢𝐨𝐧𝐚𝐝𝐚𝐬.", player.id);
-        this.adapter.sendAnnouncement("• 𝐈𝐦𝐩𝐨𝐬𝐭𝐨𝐫: 𝐃𝐞𝐛𝐞 𝐟𝐢𝐧𝐠𝐢𝐫 𝐪𝐮𝐞 𝐬𝐚𝐛𝐞 𝐩𝐚𝐫𝐚 𝐧𝐨 𝐬𝐞𝐫 𝐯𝐨𝐭𝐚𝐝𝐨.", player.id);
+        this.adapter.sendAnnouncement("Escribi Jugar para entrar a la partida siguiente :)", player.id, { color: 0x00FF00, fontWeight: 'bold' });
+        this.adapter.sendAnnouncement("🎭 ROLES:", player.id, { color: 0xFFFF00 });
+        this.adapter.sendAnnouncement("- ⚽ FUTBOLISTA: Sabes el nombre. Da pistas sin revelarlo.", player.id);
+        this.adapter.sendAnnouncement("- 🕵️ IMPOSTOR: No sabes nada. Fingí y miente para encajar.", player.id);
+        this.adapter.sendAnnouncement("\n🎮 DINÁMICA:", player.id, { color: 0xFFFF00 });
+        this.adapter.sendAnnouncement("1. Ronda de 5 jugadores. Cada uno da 1 pista.", player.id);
+        this.adapter.sendAnnouncement("2. Al final, debaten y votan por el número del impostor.", player.id);
+        this.adapter.sendAnnouncement("\n🏆 OBJETIVOS:", player.id, { color: 0xFFFF00 });
+        this.adapter.sendAnnouncement("- Civiles: Votar al impostor.", player.id);
+        this.adapter.sendAnnouncement("- Impostor: Sobrevivir a la votación.", player.id);
         return false;
     }
 
