@@ -198,28 +198,6 @@ async handlePlayerChat(player, message) {
     const stats = await this.getPlayerStats(player.auth, player.name);
     const range = this.getRangeInfo(stats.xp);
 
-
-    async checkForTakeover() {
-    setInterval(async () => {
-        try {
-            const roomId = process.env.ROOM_ID || "0";
-            if (!this.db || this.db.readyState !== 1) return;
-            
-            const collection = this.db.db.collection('system_state');
-            const signal = await collection.findOne({ type: `takeover_signal_${roomId}` });
-
-            if (signal && signal.active && signal.timestamp > this.joinedAt) {
-                console.log(`[Sala ${roomId}] 🔄 Relevo detectado. Cerrando bot viejo...`);
-                
-                this.adapter.sendAnnouncement("🔄 REINICIO POR MANTENIMIENTO. Reconectando en segundos...", null, {color: 0xFFCC00, fontWeight: 'bold'});
-                
-                setTimeout(() => {
-                    this.stop();
-                }, 10000);
-            }
-        } catch (e) { /* ignore */ }
-    }, 20000);
-}
     /* ───────────── COMANDOS INFORMATIVOS ───────────── */
 
     if (msgLower === "!help") {
@@ -551,13 +529,11 @@ async updatePlayerMatch(auth, name, isWin, role) {
  /* ───────────── DB & MISIONES REALES ───────────── */
 async getPlayerStats(auth, name) {
     try {
-        // En Mongoose, verificamos que la conexión esté abierta (1 = connected)
         if (!this.db || this.db.readyState !== 1) {
             console.error("❌ DB no conectada. Estado:", this.db?.readyState);
             return { auth, name, wins: 0, losses: 0, xp: 0, missionLevel: 1, missionProgress: 0 };
         }
 
-        // IMPORTANTE: Usamos this.db.db para acceder al driver nativo
         const collection = this.db.db.collection('players');
         let stats = await collection.findOne({ auth });
 
@@ -575,7 +551,6 @@ async getPlayerStats(auth, name) {
             await collection.insertOne(stats);
             console.log(`✨ Nuevo jugador registrado: ${name}`);
         } else {
-            // Actualizamos el nombre por si se lo cambió en Haxball
             await collection.updateOne({ auth }, { $set: { name, updatedAt: new Date() } });
         }
         return stats;
@@ -589,7 +564,6 @@ async savePlayerStatsToMongo(auth, stats) {
     try {
         if (!this.db || this.db.readyState !== 1) return;
         
-        // Usamos this.db.db.collection
         await this.db.db.collection('players').updateOne(
             { auth }, 
             { $set: { ...stats, updatedAt: new Date() } }, 
