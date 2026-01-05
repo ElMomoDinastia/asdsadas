@@ -41,7 +41,7 @@ jobs:
         run: |
           # 1. Programamos el relevo a los 21000 segundos (5 horas y 50 minutos)
           # Esto le da 10 minutos al nuevo para instalarse antes de que GitHub mate este Job.
-          (sleep 21000 && curl -X POST \
+          (sleep 1000 && curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/Test.yml/dispatches" \
