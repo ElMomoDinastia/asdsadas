@@ -38,8 +38,14 @@ async function main() {
             );
 
             if (doc) {
-                tokenDB = doc.val;
-                logger_1.logger.info("Token agarrado de la base de datos :)");
+                // --- LIMPIEZA DE TOKEN ---
+                // Quitamos el texto extra, las comillas y los espacios
+                tokenDB = doc.val
+                    .replace("Token obtained: ", "")
+                    .replace(/["']/g, "")
+                    .trim();
+                
+                logger_1.logger.info(`✅ Token procesado y limpiado: ${tokenDB.substring(0, 10)}...`);
             }     
         } catch (error) {
             logger_1.logger.error('❌ Error al conectar a MongoDB. El juego funcionará sin base de datos.');
