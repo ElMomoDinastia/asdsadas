@@ -117,6 +117,19 @@ class HBRoomAdapter {
     await this.page?.evaluate(() => window.__haxRoom?.clearBans()); 
 }
 
+    
+    async startRecording() { 
+        await this.page?.evaluate(() => window.__haxRoom?.startRecording()); 
+    }
+
+    async stopRecording() {
+        return await this.page?.evaluate(() => {
+            const data = window.__haxRoom?.stopRecording();
+            if (!data) return null;
+            return Array.from(data);
+        });
+    }
+
 async kickPlayer(id, reason, ban) {
     await this.page?.evaluate((i, r, b) => window.__haxRoom?.kickPlayer(i, r, b), id, reason, ban);
 }
