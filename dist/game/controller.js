@@ -220,13 +220,13 @@ async start() {
 
     console.log("[GameController] start()");
 
-    if (!this.adapter || typeof this.adapter.init !== "function") {
-        throw new Error("❌ Adapter no tiene método init()");
+    if (!this.adapter || typeof this.adapter.initialize !== "function") {
+        throw new Error("❌ Adapter no tiene método initialize()");
     }
-   console.log("Adapter methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(this.adapter)));
 
-    await this.adapter.init(); // 👈 ACÁ se crea la sala
+    await this.adapter.initialize(); // ✅
 }
+
 
 stop() {
     if (!this.started) return;
