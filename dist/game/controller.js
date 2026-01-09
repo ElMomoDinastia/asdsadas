@@ -889,6 +889,10 @@ clearPhaseTimer() {
         clearTimeout(this.phaseTimer); 
     }
     this.phaseTimer = null; 
+    }
 }
+
+exports.GameController = GameController;
+
 
 exports.GameController = GameController;
