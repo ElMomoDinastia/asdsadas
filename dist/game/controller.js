@@ -890,5 +890,5 @@ clearPhaseTimer() {
         }
         this.phaseTimer = null; 
     }
-
+}
 exports.GameController = GameController;
