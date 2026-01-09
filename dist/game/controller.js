@@ -558,20 +558,39 @@ async checkForTakeover() {
       /* ───────────── SIDE EFFECTS ───────────── */
     
       async executeSideEffects(effects) {
-        if (!effects) return;
-        for (const e of effects) {
-          switch (e.type) {
-            case "MOVE_TO_SPECT": await this.adapter.setPlayerTeam(e.playerId, 0); break;
-            case "ANNOUNCE_PUBLIC": this.adapter.sendAnnouncement(e.message, null, e.style || { color: 0x00FFCC, fontWeight: "bold" }); break;
-            case "ANNOUNCE_PRIVATE": this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xFFFF00, fontWeight: "bold" }); break;
-            case "SET_PHASE_TIMER": this.setPhaseTimer(e.durationSeconds, e.nextAction); break;
-            case "CLEAR_TIMER": this.clearPhaseTimer(); break;
-            case "SAVE_PLAYER_LOG": this.savePlayerLogToMongo(e.payload); break;
-            case "UPDATE_STATS": this.processUpdateStats(e.payload.winners, e.payload.losers, e.payload.winnerRole); break;
-            case "AUTO_START_GAME": this.checkAutoStart(); break;
-          }
+    if (!effects) return;
+    for (const e of effects) {
+        // LOG: Para saber qué orden recibió el controlador
+        console.log(`[EXECUTE_EFFECT] Procesando: ${e.type}`, e.payload || "");
+
+        switch (e.type) {
+            case "MOVE_TO_SPECT": 
+                await this.adapter.setPlayerTeam(e.playerId, 0); 
+                break;
+            case "ANNOUNCE_PUBLIC": 
+                this.adapter.sendAnnouncement(e.message, null, e.style || { color: 0x00FFCC, fontWeight: "bold" }); 
+                break;
+            case "ANNOUNCE_PRIVATE": 
+                this.adapter.sendAnnouncement(e.message, e.playerId, { color: 0xFFFF00, fontWeight: "bold" }); 
+                break;
+            case "SET_PHASE_TIMER": 
+                this.setPhaseTimer(e.durationSeconds, e.nextAction); 
+                break;
+            case "CLEAR_TIMER": 
+                this.clearPhaseTimer(); 
+                break;
+            case "SAVE_PLAYER_LOG": 
+                this.savePlayerLogToMongo(e.payload); 
+                break;
+            case "UPDATE_STATS": 
+                this.processUpdateStats(e.payload.winners, e.payload.losers, e.payload.winnerRole); 
+                break;
+            case "AUTO_START_GAME": 
+                this.checkAutoStart(); 
+                break;
         }
-      }
+    }
+}
     
       /* ───────────── DB & MISIONES ───────────── */
     
@@ -755,28 +774,36 @@ async savePlayerLogToMongo(payload) {
     return n(foot).split(/\s+/).some(p => p.length > 2 && c.includes(p));
   }
 
-  setPhaseTimer(sec, nextAction = null) {
+ setPhaseTimer(sec, nextAction = null) {
     this.clearPhaseTimer();
-    this.phaseTimer = setTimeout(() => {
-      if (nextAction) {
-        this.applyTransition((0, state_machine_1.transition)(this.state, { type: nextAction }));
-        return;
-      }
-      const type = this.state.phase === types_1.GamePhase.CLUES ? "SUBMIT_CLUE" : this.state.phase === types_1.GamePhase.DISCUSSION ? "END_DISCUSSION" : "END_VOTING";
-      const giver = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
-      this.applyTransition((0, state_machine_1.transition)(this.state, { type, playerId: giver, clue: "⌛" }));
-    }, sec * 1000);
-  }
+    
+    // LOG: Fundamental para saber si el tiempo se configuró bien
+    const actionLog = nextAction || (this.state.phase === types_1.GamePhase.CLUES ? "AUTO_CLUE" : "AUTO_TRANSITION");
+    console.log(`[TIMER_START] ⏳ ${sec} segundos para la acción: ${actionLog}`);
 
-  clearPhaseTimer() { if (this.phaseTimer) clearTimeout(this.phaseTimer); this.phaseTimer = null; }
-  async start() { await this.adapter.initialize(); }
-  stop() { 
-    this.clearPhaseTimer(); 
-    this.adapter.close(); 
-    setTimeout(() => {
-        process.exit(0);
-    }, 2000);
-  }
-} 
+    this.phaseTimer = setTimeout(() => {
+        console.log(`[TIMER_EXPIRED] Disparando acción programada: ${actionLog}`);
+        
+        if (nextAction) {
+            this.applyTransition((0, state_machine_1.transition)(this.state, { type: nextAction }));
+            return;
+        }
+
+        const type = this.state.phase === types_1.GamePhase.CLUES ? "SUBMIT_CLUE" : 
+                     this.state.phase === types_1.GamePhase.DISCUSSION ? "END_DISCUSSION" : "END_VOTING";
+        
+        const giver = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
+        
+        this.applyTransition((0, state_machine_1.transition)(this.state, { type, playerId: giver, clue: "⌛" }));
+    }, sec * 1000);
+}
+
+clearPhaseTimer() { 
+    if (this.phaseTimer) {
+        console.log("[TIMER_CLEAR] Cronómetro detenido.");
+        clearTimeout(this.phaseTimer); 
+    }
+    this.phaseTimer = null; 
+}
 
 exports.GameController = GameController;
