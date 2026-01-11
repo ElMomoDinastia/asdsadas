@@ -390,12 +390,30 @@ if (msgLower === "!stop" || msgLower === "!cancelar") {
         if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
     }
 
-    // Reiniciamos el estado del controlador
     this.state.phase = types_1.GamePhase.WAITING;
     this.state.currentRound = null;
     this.clearPhaseTimer();
     
     return false;
+}
+
+
+if (message.startsWith("!unblacklist ")) {
+    if (!isDbAdmin) return; 
+    const targetAuth = message.split(" ")[1];
+    if (!targetAuth) return this.adapter.sendChat("❌ Uso: !unblacklist [AUTH]", player.id);
+
+    try {
+        const result = await this.db.db.collection('blacklist').deleteOne({ auth: targetAuth });
+        
+        if (result.deletedCount > 0) {
+            this.adapter.sendChat(`✅ El Auth ${targetAuth} ha sido removido de la Blacklist.`);
+        } else {
+            this.adapter.sendChat("❌ No se encontró ningún baneo con ese Auth.");
+        }
+    } catch (e) {
+        console.error("Error al quitar de blacklist:", e);
+    }
 }
 
 
@@ -474,7 +492,7 @@ if (msgLower === "!clearbans" || msgLower === "!unbanall") {
     return false; // Para que nadie vea la contraseña en el chat
 }
 
-if (msgLower === "!votar" || msgLower === "!skip") {
+if (msgLower === "votar" || msgLower === "skip") {
     // 1. Validar que estemos en debate
     if (this.state.phase !== types_1.GamePhase.DISCUSSION) {
         this.adapter.sendAnnouncement("⚠️ Solo podés usar !votar durante el debate.", player.id, { color: 0xFF4444 });
@@ -537,7 +555,7 @@ if (msgLower.startsWith("!addadmin")) {
     return false;
 }
 
- if (msgLower === "!comojugar") {
+if (msgLower === "!comojugar" || msgLower === "skip") {
         this.adapter.sendAnnouncement("▌ ◢◤━  ¿𝐂𝐎𝐌𝐎 𝐉𝐔𝐆𝐀𝐑?  ━◥◣ ▐", player.id, { color: 0x00FF00, fontWeight: 'bold' });
         this.adapter.sendAnnouncement("Escribi Jugar para entrar a la partida siguiente :)", player.id, { color: 0x00FF00, fontWeight: 'bold' });
         this.adapter.sendAnnouncement("🎭 ROLES:", player.id, { color: 0xFFFF00 });
@@ -617,13 +635,11 @@ const prefix = player.admin ? `⭐ ${range.emoji}` : range.emoji;
     const chatColor = player.admin ? 0x00FFFF : range.color;
 
     if (isPlaying) {
-        // Mensaje global para los que están en la ronda
         this.adapter.sendAnnouncement(`${prefix} ${player.name}: ${msg}`, null, { 
             color: chatColor, 
             fontWeight: stats.xp >= 6000 ? 'bold' : 'normal' 
         });
     } else {
-        // Chat para espectadores
         const allPlayers = await this.adapter.getPlayerList();
         allPlayers.forEach(p => {
             if (!this.isPlayerInRound(p.id)) {
@@ -633,7 +649,6 @@ const prefix = player.admin ? `⭐ ${range.emoji}` : range.emoji;
     }
     return false;
 }
-/* ───────────── MÉTODOS DE SISTEMA ───────────── */
 
 async checkForTakeover() {
     setInterval(async () => {
