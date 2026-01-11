@@ -254,13 +254,11 @@ async start() {
         await this.adapter.initialize();
     } 
 
+  // 1. Asegúrate de que handleBlacklistCommand termine con su llave
     async handleBlacklistCommand(player, targetId, reason = "Blacklist Permanente") {
         try {
             const target = (await this.adapter.getPlayerList()).find(p => p.id === targetId);
-            
-            if (!target) {
-                return this.adapter.sendChat("❌ Jugador no encontrado", player.id);
-            }
+            if (!target) return this.adapter.sendChat("❌ Jugador no encontrado", player.id);
 
             if (this.db && this.db.readyState === 1) {
                 await this.db.db.collection('blacklist').insertOne({
@@ -271,16 +269,26 @@ async start() {
                     admin: player.name,
                     date: new Date()
                 });
-
                 await this.adapter.kickPlayer(target.id, `🚫 Blacklist: ${reason}`, true);
                 this.adapter.sendChat(`🚫 ${target.name} fue blacklisteado por ${player.name}`);
-                
-                await this.sendDiscordLog("BLACKLIST", player.name, target.name, reason);
             }
         } catch (e) {
-            console.error("Error en Blacklist Command:", e);
+            console.error("Error en Blacklist:", e);
         }
+    } 
+
+    stop() {
+        if (!this.started) return;
+        this.started = false;
+        console.log("[GameController] stop()");
+        this.clearPhaseTimer();
+        try {
+            this.adapter.stopGame();
+            this.adapter.setTeamsLock(false);
+        } catch (_) {}
     }
+
+} 
     
 async handlePlayerKicked(target, reason, ban, admin) {
     try {
@@ -424,25 +432,27 @@ if (message.startsWith("!unblacklist ")) {
     }
 }
 
-    if (message.startsWith("!blacklist ")) {
-    // Solo permitimos que los admins de la DB lo usen
+   if (message.startsWith("!blacklist ")) {
     if (!isDbAdmin) return;
 
-    // Obtenemos el ID del jugador desde el comando (ej: !blacklist 5)
     const args = message.split(" ");
     const targetId = parseInt(args[1]);
     
-    // El resto del mensaje es la razón (ej: !blacklist 5 insultos constantes)
-    const reason = args.slice(2).join(" ") || "Sin razón especificada";
-
-    // Buscamos al jugador en la sala actual
-    const target = (await this.adapter.getPlayerList()).find(p => p.id === targetId);
-
-    if (!target) {
-        return this.adapter.sendChat("❌ Error: Jugador no encontrado. Usá el ID que sale al lado del nombre.", player.id);
+    // 🛡️ ESCUDO: Si el ID no es un número (ej: !blacklist Teleese), avisamos y frenamos.
+    if (isNaN(targetId)) {
+        return this.adapter.sendChat("❌ Error: Debes usar el ID numérico. Ejemplo: !blacklist 7", player.id);
     }
 
+    const reason = args.slice(2).join(" ") || "Sin razón especificada";
+
     try {
+        const players = await this.adapter.getPlayerList();
+        const target = players.find(p => p.id === targetId);
+
+        if (!target) {
+            return this.adapter.sendChat("❌ Error: Jugador no encontrado. Chequeá el ID con !ids.", player.id);
+        }
+
         if (this.db && this.db.readyState === 1) {
             await this.db.db.collection('blacklist').insertOne({
                 name: target.name,
@@ -454,20 +464,14 @@ if (message.startsWith("!unblacklist ")) {
             });
 
             await this.adapter.kickPlayer(target.id, `🚫 Blacklist: ${reason}`, true);
-            
-            // 2. Avisamos en el chat
-            this.adapter.sendChat(`🚫 ${target.name} ha sido agregado a la Blacklist permanente por ${player.name}.`);
-            
-            // 3. Log a Discord (esto ya lo tenías configurado)
+            this.adapter.sendChat(`🚫 ${target.name} fue agregado a la Blacklist por ${player.name}.`);
             await this.sendDiscordLog("BLACKLIST", player.name, target.name, reason);
-            
-            console.log(`[DB] Blacklist: ${target.name} baneado por ${player.name}`);
         } else {
-            this.adapter.sendChat("❌ Error: No se pudo conectar a la base de datos.");
+            this.adapter.sendChat("❌ Error: Base de datos desconectada.");
         }
     } catch (e) {
         console.error("Error al ejecutar blacklist:", e);
-        this.adapter.sendChat("❌ Error interno al intentar guardar el baneo.");
+        this.adapter.sendChat("❌ Error interno al procesar el baneo.");
     }
 }
 
