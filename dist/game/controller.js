@@ -242,51 +242,46 @@ getRangeInfo(xp) {
 }
 
 async start() {
-    if (this.started) return;
-    this.started = true;
+        if (this.started) return;
+        this.started = true;
 
-    console.log("[GameController] start()");
+        console.log("[GameController] start()");
 
-    if (!this.adapter || typeof this.adapter.initialize !== "function") {
-        throw new Error("❌ Adapter no tiene método initialize()");
-    }
-
-    await this.adapter.initialize(); 
-}
-
-async handleBlacklistCommand(player, targetId) {
-    const target = (await this.adapter.getPlayerList()).find(p => p.id === targetId);
-    
-    if (!target) return this.adapter.sendChat("❌ Jugador no encontrado", player.id);
-
-async handleBlacklistCommand(player, targetId, reason = "Blacklist Permanente") {
-    try {
-        const target = (await this.adapter.getPlayerList()).find(p => p.id === targetId);
-        
-        if (!target) {
-            return this.adapter.sendChat("❌ Jugador no encontrado", player.id);
+        if (!this.adapter || typeof this.adapter.initialize !== "function") {
+            throw new Error("❌ Adapter no tiene método initialize()");
         }
 
-        if (this.db && this.db.readyState === 1) {
-            await this.db.db.collection('blacklist').insertOne({
-                name: target.name,
-                auth: target.auth,
-                conn: target.conn, 
-                reason: reason,
-                admin: player.name,
-                date: new Date()
-            });
+        await this.adapter.initialize();
+    } 
 
-            await this.adapter.kickPlayer(target.id, `🚫 Blacklist: ${reason}`, true);
-            this.adapter.sendChat(`🚫 ${target.name} fue blacklisteado por ${player.name}`);
+    async handleBlacklistCommand(player, targetId, reason = "Blacklist Permanente") {
+        try {
+            const target = (await this.adapter.getPlayerList()).find(p => p.id === targetId);
             
-            await this.sendDiscordLog("BLACKLIST", player.name, target.name, reason);
-        }
-    } catch (e) {
-        console.error("Error en Blacklist Command:", e);
-    }
-}
+            if (!target) {
+                return this.adapter.sendChat("❌ Jugador no encontrado", player.id);
+            }
 
+            if (this.db && this.db.readyState === 1) {
+                await this.db.db.collection('blacklist').insertOne({
+                    name: target.name,
+                    auth: target.auth,
+                    conn: target.conn, 
+                    reason: reason,
+                    admin: player.name,
+                    date: new Date()
+                });
+
+                await this.adapter.kickPlayer(target.id, `🚫 Blacklist: ${reason}`, true);
+                this.adapter.sendChat(`🚫 ${target.name} fue blacklisteado por ${player.name}`);
+                
+                await this.sendDiscordLog("BLACKLIST", player.name, target.name, reason);
+            }
+        } catch (e) {
+            console.error("Error en Blacklist Command:", e);
+        }
+    }
+    
 async handlePlayerKicked(target, reason, ban, admin) {
     try {
         const adminName = admin ? admin.name : "Sistema/Bot";
