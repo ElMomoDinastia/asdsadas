@@ -293,17 +293,12 @@ async start() {
             const adminName = admin ? admin.name : "Sistema/Bot";
             const type = ban ? "BAN" : "KICK";
             const finalReason = reason || "No se especificó razón";
-
             console.log(`[LOG] ${type} detectado: ${target.name} por ${adminName}`);
-
             await this.sendDiscordLog(type, adminName, target.name, finalReason);
         } catch (e) {
             console.error("Error en handlePlayerKicked:", e);
         }
-    }
-
-} 
-
+    } // Aquí termina la función
 async handlePlayerChat(player, message) {
     const msg = message.trim();
     const msgLower = msg.toLowerCase();
