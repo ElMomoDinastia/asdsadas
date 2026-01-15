@@ -46,18 +46,21 @@ class HBRoomAdapter {
             const isFooter = String(this.config.isFooter) === 'true';
             const isDecorativo = isHeader || isFooter;
 
-            let finalName = "";
-            const fancyNums = ["𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳", "𝟬𝟴"];
+let finalName = "";
+const fancyNums = ["𝟬𝟬", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳", "𝟬𝟴"];
 
-            if (isHeader) {
-    // Los rayos le dan el toque de color, el ┃ la estructura.
-            finalName = "┃ ▒░ ⚡ 𝐏𝐑𝐎𝐉𝐄𝐂𝐓𝐎 𝐓𝐄𝐋𝐄𝐄𝐒𝐄 ⚡ ░▒ ┃";
-            } else if (isFooter) {
-            finalName = "┃ ▒░ 🔗 dsc.gg/impostores ░▒ ┃";
+// Lógica para 8 tokens (0 al 7)
+if (roomNumber === 0) { 
+    // TOKEN 0: El Header (Más corto para que no se corte el rayito)
+    finalName = "⚡▒ 𝐓𝐄𝐋𝐄𝐄𝐒𝐄 𝐏𝐑𝐎𝐉𝐄𝐂𝐓 ▒⚡";
+} else if (roomNumber === 7) { 
+    // TOKEN 7: El Footer (El último de tus 8 tokens)
+    finalName = "🔗▒ dsc.gg/impostores ▒";
 } else {
-    const n = fancyNums[roomNumber] ?? (roomNumber + 1).toString().padStart(2, "0");    
-    // Las bolitas rojas quedan alineadas perfecto con los bordes de arriba
-    finalName = `┃ 🔴 ▒░ 𝐈𝐌𝐏𝐎𝐒𝐓𝐎𝐑 ${n} ░▒ 🔴 ┃`;
+    // TOKENS 1 al 6: Las 6 salas de juego
+    // Usamos roomNumber para que la sala del token 1 diga "01", la del 2 "02", etc.
+    const n = fancyNums[roomNumber];    
+    finalName = `🔴▒ 𝐈𝐌𝐏𝐎𝐒𝐓𝐎𝐑 ${n} ▒🔴`;
 }
 
             const roomConfig = {
