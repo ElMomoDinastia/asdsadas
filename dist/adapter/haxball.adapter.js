@@ -47,14 +47,18 @@ class HBRoomAdapter {
             const isDecorativo = isHeader || isFooter;
 
             let finalName = "";
+            const fancyNums = ["𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳", "𝟬𝟴"];
+
             if (isHeader) {
-            finalName = "◥◣  ▓▒░  𝐏𝐑𝐎𝐉𝐄𝐂𝐓𝐎 𝐓𝐄𝐋𝐄𝐄𝐒𝐄 ░▒▓  ◢◤";
+    // Los rayos le dan el toque de color, el ┃ la estructura.
+            finalName = "┃ ▒░ ⚡ 𝐏𝐑𝐎𝐉𝐄𝐂𝐓𝐎 𝐓𝐄𝐋𝐄𝐄𝐒𝐄 ⚡ ░▒ ┃";
             } else if (isFooter) {
-            finalName = "◢◤  ▓▒░  dsc.gg/impostores  ░▒▓  ◥◣";
-            } else {
-            const n = fancyNums[roomNumber] ?? (roomNumber + 1).toString().padStart(2, "0");    
-            finalName = `▒░ 🔴 » 𝐈𝐌𝐏𝐎𝐒𝐓𝐎𝐑 ${n} « 🔴 ░▒ ▄`;
-            }
+            finalName = "┃ ▒░ 🔗 dsc.gg/impostores ░▒ ┃";
+} else {
+    const n = fancyNums[roomNumber] ?? (roomNumber + 1).toString().padStart(2, "0");    
+    // Las bolitas rojas quedan alineadas perfecto con los bordes de arriba
+    finalName = `┃ 🔴 ▒░ 𝐈𝐌𝐏𝐎𝐒𝐓𝐎𝐑 ${n} ░▒ 🔴 ┃`;
+}
 
             const roomConfig = {
                 roomName: finalName,
