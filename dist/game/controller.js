@@ -916,15 +916,14 @@ startDiscordAdvertisement() {
     setInterval(() => {
         const discordLink = "dsc.gg/Impostores";
         const title = "ᴜɴɪᴛᴇ ᴀʟ ᴅɪꜱᴄᴏʀᴅ";
-        
         this.adapter.sendAnnouncement(
-            `┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n  💙 ${s(title)}\n  🔗 ${discordLink}\n┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛`,
+            `◥◣  ▓▒░  ${s(title)}  ░▒▓  ◢◤\n` +
+            `      🔗  ${discordLink}`,
             null, 
             { color: 0x5865F2, fontWeight: "bold" } 
         );
-    }, 180000);
+    }, 120000); 
 }
-
 async savePlayerLogToMongo(payload) {
     try {
         if (this.db && this.db.readyState === 1) {
