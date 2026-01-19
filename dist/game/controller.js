@@ -170,7 +170,7 @@ async handlePlayerJoin(player) {
     };
 
     // 5. TRANSICIÓN DE ESTADO Y LOGS
-    const result = (0, state_machine_1.transition)(this.state, {
+   const result = (0, state_machine_1.transition)(this.state, {
       type: "PLAYER_JOIN",
       player: gamePlayer,
     });
@@ -182,7 +182,8 @@ async handlePlayerJoin(player) {
         auth: player.auth,
         conn: player.conn,
         room: config_1.config.roomName || "SALA DESCONOCIDA",
-        role: isDbAdmin ? "ADMIN" : "PLAYER" 
+        role: isDbAdmin ? "ADMIN" : "PLAYER",
+        timestamp: new Date() // <--- AGREGA ESTA LÍNEA AQUÍ
       },
     });
 
