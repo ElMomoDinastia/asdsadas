@@ -126,8 +126,8 @@ async handlePlayerJoin(player) {
             });
 
             if (banned) {
-                console.log(`[BLACKLIST] Bloqueado: ${player.name}`);
-                this.adapter.kickPlayer(player.id, "🚫 Blacklisted: " + (banned.reason || "Baneo Permanente"), true);
+                console.log(`[BLACKLIST] Bloqueado: ${player.name} (Motivo: ${banned.reason || "Baneo Permanente"})`);
+                this.adapter.kickPlayer(player.id, "🚫 Estas Blacklisteado", true);
                 return; 
             }
         }
@@ -135,6 +135,7 @@ async handlePlayerJoin(player) {
         console.error("Error al consultar blacklist:", e);
     }
 
+    // 2. ANTI-MULTI (Cuentas duplicadas en la misma sesión)
     const allPlayers = Array.from(this.state.players.values());
     const isMulti = allPlayers.find(p => p.auth === player.auth || p.conn === player.conn);
 
@@ -143,6 +144,7 @@ async handlePlayerJoin(player) {
         return; 
     }
 
+    // 3. DETECCIÓN DE ADMINISTRADOR (Base de Datos)
     let isDbAdmin = false;
     try {
         if (this.db && this.db.readyState === 1) {
@@ -157,6 +159,7 @@ async handlePlayerJoin(player) {
         console.error("Error al consultar admins en DB:", e);
     }
 
+    // 4. CREACIÓN DEL OBJETO DE JUGADOR PARA EL ESTADO
     const gamePlayer = {
       id: player.id,
       name: player.name,
@@ -166,6 +169,7 @@ async handlePlayerJoin(player) {
       joinedAt: Date.now(),
     };
 
+    // 5. TRANSICIÓN DE ESTADO Y LOGS
     const result = (0, state_machine_1.transition)(this.state, {
       type: "PLAYER_JOIN",
       player: gamePlayer,
@@ -307,7 +311,8 @@ async handlePlayerChat(player, message) {
     const msg = message.trim();
     const msgLower = msg.toLowerCase();
     const isPlaying = this.isPlayerInRound(player.id);
-    
+    const roomPlayer = this.state.players.get(player.id);
+    const isDbAdmin = roomPlayer?.isAdmin || player.admin;    
     const roomPlayer = this.state.players.get(player.id);
     const validAuth = roomPlayer ? roomPlayer.auth : player.auth;
     const validName = roomPlayer ? roomPlayer.name : player.name;
@@ -479,25 +484,27 @@ if (message.startsWith("!unblacklist ")) {
     }
 }
 
-   if (message.startsWith("!blacklist ")) {
-    if (!isDbAdmin) return;
+   if (msgLower.startsWith("!blacklist ")) {
+    if (!isDbAdmin) return false; // Solo admins de DB pueden usarlo
 
-    const args = message.split(" ");
+    const args = msg.split(" ");
     const targetId = parseInt(args[1]);
     
-    // 🛡️ ESCUDO: Si el ID no es un número (ej: !blacklist Teleese), avisamos y frenamos.
+    // 🛡️ Validación de ID
     if (isNaN(targetId)) {
-        return this.adapter.sendChat("❌ Error: Debes usar el ID numérico. Ejemplo: !blacklist 7", player.id);
+        this.adapter.sendChat("❌ Uso: !blacklist [ID] [Razón]", player.id);
+        return false;
     }
 
-    const reason = args.slice(2).join(" ") || "Sin razón especificada";
+    const reason = args.slice(2).join(" ") || "Baneo Permanente";
 
     try {
-        const players = await this.adapter.getPlayerList();
-        const target = players.find(p => p.id === targetId);
+        // Buscamos al jugador actual en la sala por su ID
+        const target = (await this.adapter.getPlayerList()).find(p => p.id === targetId);
 
         if (!target) {
-            return this.adapter.sendChat("❌ Error: Jugador no encontrado. Chequeá el ID con !ids.", player.id);
+            this.adapter.sendChat("❌ Jugador no encontrado.", player.id);
+            return false;
         }
 
         if (this.db && this.db.readyState === 1) {
@@ -510,16 +517,21 @@ if (message.startsWith("!unblacklist ")) {
                 date: new Date()
             });
 
-            await this.adapter.kickPlayer(target.id, `🚫 Blacklist: ${reason}`, true);
-            this.adapter.sendChat(`🚫 ${target.name} fue agregado a la Blacklist por ${player.name}.`);
+            // LOG EN CONSOLA Y KICK
+            console.log(`[DB] ${player.name} blacklisteó a ${target.name}`);
+            this.adapter.kickPlayer(target.id, "🚫 Estas Blacklisteado", true);
+            this.adapter.sendChat(`🚫 ${target.name} fue blacklisteado con éxito.`);
+            
+            // Opcional: Mandar log a Discord
             await this.sendDiscordLog("BLACKLIST", player.name, target.name, reason);
         } else {
-            this.adapter.sendChat("❌ Error: Base de datos desconectada.");
+            this.adapter.sendChat("❌ Error: Base de datos desconectada.", player.id);
         }
     } catch (e) {
         console.error("Error al ejecutar blacklist:", e);
-        this.adapter.sendChat("❌ Error interno al procesar el baneo.");
+        this.adapter.sendChat("❌ Error interno al procesar el baneo.", player.id);
     }
+    return false;
 }
 
 if (msgLower === "!clearbans" || msgLower === "!unbanall") {
@@ -777,8 +789,12 @@ async checkForTakeover() {
       /* ───────────── STATE ───────────── */
     
     applyTransition(result) {
-    const prev = this.state.phase;
+    const prevPhase = this.state.phase;
     this.state = result.state;
+    if (prevPhase !== this.state.phase) {
+        this.skipVotes.clear();
+    }
+}
 
     
     if (prev === types_1.GamePhase.WAITING && this.state.phase === types_1.GamePhase.ASSIGN) {
