@@ -47,15 +47,15 @@ class HBRoomAdapter {
             const isDecorativo = isHeader || isFooter;
 
 let finalName = "";
-const fancyNums = ["𝟬𝟬", "𝟬𝟭", "𝟬𝟮", "𝟬𝟯", "𝟬𝟰", "𝟬𝟱", "𝟬𝟲", "𝟬𝟳", "𝟬𝟴"];
+const fancyNums = ["0", "1", "2", "3", "4", "5", "6", "7", "8"];
 
 // Lógica para 8 tokens (0 al 7)
 if (roomNumber === 0) { 
     // TOKEN 0: El Header (Más corto para que no se corte el rayito)
-    finalName = "🕵️🔴───── IMPOSTORES HAXBALL ─────🔴🕵️ ";
+    finalName = "🕵️🔴──── IMPOSTORES HAXBALL ────🔴🕵️ ";
 } else if (roomNumber === 7) { 
     // TOKEN 7: El Footer (El último de tus 8 tokens)
-    finalName = "🕵️🔴───── IMPOSTORES HAXBALL ─────🔴🕵️ ";
+    finalName = "🕵️🔴──── IMPOSTORES HAXBALL ────🔴🕵️ ";
 } else {
     // TOKENS 1 al 6: Las 6 salas de juego
     // Usamos roomNumber para que la sala del token 1 diga "01", la del 2 "02", etc.
