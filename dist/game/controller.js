@@ -1119,12 +1119,13 @@ async sendDiscordReplay(url, word) {
         body: JSON.stringify(embed)
     }).catch(e => console.error("Error Webhook Log:", e));
   }
-async setupGameField() {
+
+    async setupGameField() {
     if (!this.state.currentRound || !this.state.currentRound.clueOrder) return;
-    
+
     try {
       const round = this.state.currentRound;
-      const roundPlayerIds = round.clueOrder; 
+      const roundPlayerIds = round.clueOrder;
 
       await this.adapter.setTeamsLock(true);
       await this.adapter.stopGame();
@@ -1133,51 +1134,36 @@ async setupGameField() {
       // Mover a todos a Espectadores primero
       const allPlayers = await this.adapter.getPlayerList();
       for (const p of allPlayers) {
-          if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+        if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
       }
-      
+
       await new Promise(r => setTimeout(r, 100));
 
-      // Meter a los 5 jugadores al equipo Rojo (o el que uses)
+      // Meter a los jugadores al equipo Rojo
       for (const pid of roundPlayerIds) {
         await this.adapter.setPlayerTeam(pid, 1);
         await new Promise(r => setTimeout(r, 50));
       }
 
-      // 1. INICIAR EL JUEGO (Necesario para teletransportarlos)
-      await this.adapter.startGame();
-      await new Promise(r => setTimeout(r, 200));
-
-      // 2. SENTARLOS Y PONER AVATARES (Doble Impostor Ready)
-      for (let i = 0; i < roundPlayerIds.length; i++) {
-        const pid = roundPlayerIds[i];
-        const pos = SEAT_POSITIONS[i]; // Usa las coordenadas que definiste arriba
-
-        if (pos) {
-            this.adapter.setPlayerPosition(pid, pos.x, pos.y);
-        }
-
-      console.log("[SETUP] Campo configurado con", round.impostorIds.length, "impostores.");
-
-    } catch (e) {
-      console.error("Error en setupGameField:", e);
-    }
-  }
-
-      await new Promise(r => setTimeout(r, 300));
+      // Iniciar el juego para teletransportar
       await this.adapter.startGame();
       await new Promise(r => setTimeout(r, 500));
 
+      // Posicionar a los jugadores y congelarlos
       for (let i = 0; i < roundPlayerIds.length && i < SEAT_POSITIONS.length; i++) {
-        await this.adapter.setPlayerDiscProperties(roundPlayerIds[i], { 
-          x: SEAT_POSITIONS[i].x, 
-          y: SEAT_POSITIONS[i].y, 
-          xspeed: 0, 
-          yspeed: 0 
+        await this.adapter.setPlayerDiscProperties(roundPlayerIds[i], {
+          x: SEAT_POSITIONS[i].x,
+          y: SEAT_POSITIONS[i].y,
+          xspeed: 0,
+          yspeed: 0
         });
         await new Promise(r => setTimeout(r, 100));
       }
-    } catch (e) { logger_1.gameLogger.error(e); }
+      
+      console.log("[SETUP] Campo configurado con", round.impostorIds.length, "impostores.");
+    } catch (e) {
+      console.error("Error en setupGameField:", e);
+    }
   }
 
   isPlayerInRound(playerId) {
@@ -1191,35 +1177,36 @@ async setupGameField() {
     return n(foot).split(/\s+/).some(p => p.length > 2 && c.includes(p));
   }
 
- setPhaseTimer(sec, nextAction = null) {
+  setPhaseTimer(sec, nextAction = null) {
     this.clearPhaseTimer();
-    
+
     const actionLog = nextAction || (this.state.phase === types_1.GamePhase.CLUES ? "AUTO_CLUE" : "AUTO_TRANSITION");
     console.log(`[TIMER_START] ⏳ ${sec} segundos para la acción: ${actionLog}`);
 
     this.phaseTimer = setTimeout(() => {
-        console.log(`[TIMER_EXPIRED] Disparando acción programada: ${actionLog}`);
-        
-        if (nextAction) {
-            this.applyTransition((0, state_machine_1.transition)(this.state, { type: nextAction }));
-            return;
-        }
+      console.log(`[TIMER_EXPIRED] Disparando acción programada: ${actionLog}`);
 
-        const type = this.state.phase === types_1.GamePhase.CLUES ? "SUBMIT_CLUE" : 
-                     this.state.phase === types_1.GamePhase.DISCUSSION ? "END_DISCUSSION" : "END_VOTING";
-        
-        const giver = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
-        
-        this.applyTransition((0, state_machine_1.transition)(this.state, { type, playerId: giver, clue: "⌛" }));
+      if (nextAction) {
+        this.applyTransition((0, state_machine_1.transition)(this.state, { type: nextAction }));
+        return;
+      }
+
+      const type = this.state.phase === types_1.GamePhase.CLUES ? "SUBMIT_CLUE" :
+        this.state.phase === types_1.GamePhase.DISCUSSION ? "END_DISCUSSION" : "END_VOTING";
+
+      const giver = this.state.currentRound?.clueOrder[this.state.currentRound.currentClueIndex];
+
+      this.applyTransition((0, state_machine_1.transition)(this.state, { type, playerId: giver, clue: "⌛" }));
     }, sec * 1000);
-}
+  }
 
-clearPhaseTimer() { 
-        if (this.phaseTimer) {
-            console.log("[TIMER_CLEAR] Cronómetro detenido.");
-            clearTimeout(this.phaseTimer); 
-        }
-        this.phaseTimer = null; 
+  clearPhaseTimer() {
+    if (this.phaseTimer) {
+      console.log("[TIMER_CLEAR] Cronómetro detenido.");
+      clearTimeout(this.phaseTimer);
     }
-}
+    this.phaseTimer = null;
+  }
+} // Cierre de la clase GameController
+
 exports.GameController = GameController;
