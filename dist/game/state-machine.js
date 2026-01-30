@@ -55,52 +55,67 @@ case 'PLAYER_LEAVE': {
                                  state.phase !== types_1.GamePhase.REVEAL;
 
             if (isGameActive) {
-                // 1. SI SE VA EL IMPOSTOR
-                if (action.playerId === state.currentRound.impostorId) {
-                    const winners = state.currentRound.clueOrder.filter(id => id !== action.playerId);
+                const round = state.currentRound;
+                const isImpostor = round.impostorIds.includes(action.playerId);
+                const isSpecialMode = round.mode === "DOBLE_IMPOSTOR" || round.mode === "TODO_IMPOSTOR";
+
+                // 1. SI SE VA UN IMPOSTOR
+                if (isImpostor) {
+                    const remainingImpostors = round.impostorIds.filter(id => id !== action.playerId);
+
+                    // A. Si no quedan más impostores: VICTORIA FINAL
+                    if (remainingImpostors.length === 0) {
+                        const winners = round.clueOrder.filter(id => id !== action.playerId);
+                        return {
+                            state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, phase: types_1.GamePhase.REVEAL, currentRound: null },
+                            sideEffects: [
+                                { type: 'CLEAR_TIMER' },
+                                { type: 'ANNOUNCE_PUBLIC', message: `🏃 ${s('ᴇʟ ɪᴍᴘᴏꜱᴛᴏʀ ᴀʙᴀɴᴅᴏɴᴏ ʟᴀ ᴘᴀʀᴛɪᴅᴀ')}...` },
+                                { type: 'ANNOUNCE_PUBLIC', message: `🏆 ${s('ᴠɪᴄᴛᴏʀɪᴀ ᴘᴀʀᴀ ʟᴏꜱ ɪɴᴏᴄᴇɴᴛᴇꜱ')}`, style: { color: 0x00FF00, fontWeight: 'bold' } },
+                                { type: 'UPDATE_STATS', payload: { winners, losers: [], winnerRole: 'CIVIL' } },
+                                { type: 'SET_PHASE_TIMER', durationSeconds: 5, nextAction: 'RESET_GAME' }
+                            ]
+                        };
+                    } 
+                    
+                    const newClueOrderImp = round.clueOrder.filter(id => id !== action.playerId);
                     return {
-                        state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, phase: types_1.GamePhase.REVEAL, currentRound: null },
-                        sideEffects: [
-                            { type: 'CLEAR_TIMER' },
-                            { type: 'ANNOUNCE_PUBLIC', message: `🏃 ${s('ᴇʟ ɪᴍᴘᴏꜱᴛᴏʀ ᴀʙᴀɴᴅᴏɴᴏ ʟᴀ ᴘᴀʀᴛɪᴅᴀ')}...` },
-                            { type: 'ANNOUNCE_PUBLIC', message: `🏆 ${s('ᴠɪᴄᴛᴏʀɪᴀ ᴘᴀʀᴀ ʟᴏꜱ ɪɴᴏᴄᴇɴᴛᴇꜱ')}`, style: { color: 0x00FF00, fontWeight: 'bold' } },
-                            { type: 'UPDATE_STATS', payload: { winners, losers: [], winnerRole: 'CIVIL' } },
-                            { type: 'SET_PHASE_TIMER', durationSeconds: 5, nextAction: 'RESET_GAME' }
-                        ]
+                        state: { 
+                            ...state, 
+                            players: playersAfterLeave, 
+                            queue: queueAfterLeave, 
+                            currentRound: { ...round, impostorIds: remainingImpostors, clueOrder: newClueOrderImp } 
+                        },
+                        sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `⚠️ ${s('ᴜɴ ɪɴᴏᴄᴇɴᴛᴇ ᴀʙᴀɴᴅᴏɴᴏ')}...` }] 
                     };
                 }
 
-                // 2. SI SE VA UN INOCENTE JUGANDO
-                if (state.currentRound.clueOrder.includes(action.playerId)) {
-                    const newClueOrder = state.currentRound.clueOrder.filter(id => id !== action.playerId);
-                    const newNormalIds = state.currentRound.normalPlayerIds.filter(id => id !== action.playerId);
+                if (round.clueOrder.includes(action.playerId)) {
+                    const newClueOrder = round.clueOrder.filter(id => id !== action.playerId);
+                    const newNormalIds = round.normalPlayerIds.filter(id => id !== action.playerId);
 
-                    // Victoria del impostor si queda solo 1 civil o menos
-                    if (newNormalIds.length <= 1) {
-                        const impId = state.currentRound.impostorId;
+                    if (newNormalIds.length <= 1 && round.mode !== "TODO_IMPOSTOR") {
                         return {
                             state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, phase: types_1.GamePhase.REVEAL },
                             sideEffects: [
                                 { type: 'CLEAR_TIMER' },
-                                { type: 'ANNOUNCE_PUBLIC', message: `💀 ${s('ᴇʟ ɪᴍᴘᴏꜱᴛᴏʀ ɢᴀɴᴀ ᴘᴏʀ ꜰᴀʟᴛᴀ ᴅᴇ ʀɪᴠᴀʟᴇꜱ')}` },
-                                { type: 'UPDATE_STATS', payload: { winners: [impId], losers: [...newNormalIds], winnerRole: 'IMPOSTOR' } },
+                                { type: 'ANNOUNCE_PUBLIC', message: `💀 ${s('ʟᴏꜱ ɪᴍᴘᴏꜱᴛᴏʀᴇꜱ ɢᴀɴᴀɴ ᴘᴏʀ ꜰᴀʟᴛᴀ ᴅᴇ ʀɪᴠᴀʟᴇꜱ')}` },
+                                { type: 'UPDATE_STATS', payload: { winners: round.impostorIds, losers: [...newNormalIds], winnerRole: 'IMPOSTOR' } },
                                 { type: 'SET_PHASE_TIMER', durationSeconds: 5, nextAction: 'RESET_GAME' }
                             ]
                         };
                     }
 
                     const newRound = {
-                        ...state.currentRound,
+                        ...round,
                         clueOrder: newClueOrder,
                         normalPlayerIds: newNormalIds
                     };
 
-                    // --- MANEJO POR FASES ---
 
-                    // A. SI ESTÁN EN PISTAS
                     if (state.phase === types_1.GamePhase.CLUES) {
-                        const currentIndex = state.currentRound.currentClueIndex;
-                        const wasHisTurn = state.currentRound.clueOrder[currentIndex] === action.playerId;
+                        const currentIndex = round.currentClueIndex;
+                        const wasHisTurn = round.clueOrder[currentIndex] === action.playerId;
                         const isLastNow = currentIndex >= newClueOrder.length;
                         const nextIndex = isLastNow ? 0 : currentIndex;
                         
@@ -111,7 +126,7 @@ case 'PLAYER_LEAVE': {
                                 return {
                                     state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, phase: types_1.GamePhase.DISCUSSION, currentRound: newRound },
                                     sideEffects: [
-                                        { type: 'ANNOUNCE_PUBLIC', message: `🏃 ${s('ᴇʟ ᴜʟᴛɪᴍᴏ ᴊᴜɢᴀᴅᴏʀ ꜱᴇ ꜰᴜᴇ')}.` },
+                                        { type: 'ANNOUNCE_PUBLIC', message: `🏃 ${s('ᴇʟ ᴊᴜɢᴀᴅᴏʀ ᴇɴ ᴛᴜʀɴᴏ ꜱᴇ ꜰᴜᴇ')}.` },
                                         { type: 'ANNOUNCE_PUBLIC', message: `🗣️ ${s('ᴘᴀꜱᴀɴᴅᴏ ᴀʟ ᴅᴇʙᴀᴛᴇ')}...` },
                                         { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.discussionTimeSeconds }
                                     ]
@@ -129,24 +144,20 @@ case 'PLAYER_LEAVE': {
                         }
                     }
 
-                    // B. SI ESTÁN EN VOTACIÓN
                     if (state.phase === types_1.GamePhase.VOTING) {
-                        const newVotes = new Map(state.currentRound.votes);
+                        const newVotes = new Map(round.votes);
                         newVotes.delete(action.playerId); 
                         
                         if (newVotes.size >= newClueOrder.length) {
-                            return {
-                                ...handleEndVoting({ 
-                                    ...state, 
-                                    players: playersAfterLeave, 
-                                    queue: queueAfterLeave, 
-                                    currentRound: { ...newRound, votes: newVotes } 
-                                }),
-                            };
+                            return handleEndVoting({ 
+                                ...state, 
+                                players: playersAfterLeave, 
+                                queue: queueAfterLeave, 
+                                currentRound: { ...newRound, votes: newVotes } 
+                            });
                         }
                     }
 
-                    // C. OTROS CASOS (Debate, etc)
                     return { 
                         state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, currentRound: newRound },
                         sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `⚠️ ${s('ᴜɴ ɪɴᴏᴄᴇɴᴛᴇ ᴀʙᴀɴᴅᴏɴᴏ')}.` }] 
@@ -180,29 +191,36 @@ case 'PLAYER_LEAVE': {
             };
         }
 
-       case 'START_GAME': {
+      case 'START_GAME': {
             const participants = state.queue.slice(0, 5);
-            const impostorId = participants[Math.floor(Math.random() * participants.length)];
+            const mode = action.mode || "NORMAL"; // Recibimos el modo
             
-            // --- LÓGICA SOLO PARA NO REPETIR EL ANTERIOR ---
-            // 1. Obtenemos el nombre del futbolista de la ronda que acaba de terminar
+            let impostorIds = [];
+
+            // Lógica de selección de Impostores según el modo
+            if (mode === "TODO_IMPOSTOR") {
+                impostorIds = [...participants];
+            } else if (mode === "DOBLE_IMPOSTOR") {
+                const shuffledPart = shuffle(participants);
+                impostorIds = [shuffledPart[0], shuffledPart[1]];
+            } else {
+                // NORMAL
+                impostorIds = [participants[Math.floor(Math.random() * participants.length)]];
+            }
+            
             const lastFootballer = state.lastFootballer || "";
-
-            // 2. Filtramos la lista para quitar SOLAMENTE al último que salió
             const available = action.footballers.filter(f => f !== lastFootballer);
-
-            // 3. Elegimos el nuevo futbolista de esa lista filtrada
             const footballer = available[Math.floor(Math.random() * available.length)];
-            // ----------------------------------------------
 
             const round = {
                 footballer, 
-                impostorId,
-                normalPlayerIds: participants.filter(id => id !== impostorId),
+                impostorIds, // <--- Ahora es una lista
+                normalPlayerIds: participants.filter(id => !impostorIds.includes(id)),
                 clueOrder: shuffle(participants),
                 currentClueIndex: 0,
                 clues: new Map(), 
-                votes: new Map()
+                votes: new Map(),
+                mode: mode // Guardamos el modo en la ronda
             };
 
             const effects = [
@@ -212,7 +230,7 @@ case 'PLAYER_LEAVE': {
             ];
 
             participants.forEach(id => {
-                const isImp = id === impostorId;
+                const isImp = impostorIds.includes(id);
                 const msg = isImp 
                     ? `👺 ${s('ᴇʀᴇꜱ ᴇʟ ɪᴍᴘᴏꜱᴛᴏʀ')} • ${s('ᴅɪꜱɪᴍᴜʟᴀ ʏ ꜱᴏʙʀᴇᴠɪᴠᴇ')}` 
                     : `⚽ ${s('ᴇʟ ᴊᴜɢᴀᴅᴏʀ ᴇꜱ')}: ${footballer.toUpperCase()}`;
@@ -225,12 +243,12 @@ case 'PLAYER_LEAVE': {
                     phase: types_1.GamePhase.ASSIGN, 
                     currentRound: round, 
                     queue: state.queue.slice(5),
-                    // Guardamos el futbolista actual como "el último" para la próxima ronda
                     lastFootballer: footballer 
                 }, 
                 sideEffects: effects 
             };
         }
+            
 case 'SUBMIT_CLUE': {
             const rClue = state.currentRound;
             
@@ -340,23 +358,17 @@ case 'SUBMIT_CLUE': {
 }
 
 /**
- * LÓGICA DE CIERRE DE VOTACIÓN (REVEAL)
+ * LÓGICA DE CIERRE DE VOTACIÓN (REVEAL) - SOPORTE MULTI-IMPOSTOR Y ENGAÑO
  */
 function handleEndVoting(state) {
     const round = state.currentRound;
-    if (!round) {
-        console.log("[DEBUG-VOTE] Error: No hay ronda activa al intentar finalizar votación.");
-        return { state, sideEffects: [] };
-    }
+    if (!round) return { state, sideEffects: [] };
 
     const counts = {};
     round.votes.forEach(v => counts[v] = (counts[v] || 0) + 1);
     const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-    
-    console.log("[DEBUG-VOTE] Conteo final de votos:", counts);
 
     if (sorted.length === 0) {
-        console.log("[DEBUG-VOTE] Resultado: Nadie votó.");
         return { 
             state: { ...state, phase: types_1.GamePhase.REVEAL }, 
             sideEffects: [
@@ -367,82 +379,82 @@ function handleEndVoting(state) {
     }
 
     const votedOutId = parseInt(sorted[0]); 
-    const isImpostor = votedOutId === round.impostorId;
+    const isActuallyImpostor = round.impostorIds.includes(votedOutId);
     const votedPlayer = state.players.get(votedOutId);
     const votedName = (votedPlayer?.name || "Alguien").toUpperCase();
+    const isSpecialMode = round.mode === "DOBLE_IMPOSTOR" || round.mode === "TODO_IMPOSTOR";
 
-    console.log(`[DEBUG-VOTE] Ganador votos ID: ${votedOutId} (${votedName}). ¿Es Impostor?: ${isImpostor}`);
+    if (isActuallyImpostor) {
+        const remainingImpostors = round.impostorIds.filter(id => id !== votedOutId);
 
-    // VICTORIA CIVILES: El Impostor es votado
-    if (isImpostor) {
-        console.log("[DEBUG-VOTE] Camino: Victoria Inocentes.");
+        if (remainingImpostors.length === 0) {
+            return { 
+                state: { ...state, phase: types_1.GamePhase.REVEAL }, 
+                sideEffects: [
+                    { type: 'CLEAR_TIMER' },
+                    { type: 'MOVE_TO_SPECT', playerId: votedOutId },
+                    { type: 'ANNOUNCE_PUBLIC', message: BORDER },
+                    { type: 'ANNOUNCE_PUBLIC', message: `🎯 ¡${s('ʟᴏ ᴄᴀᴢᴀʀᴏɴ')}! ${votedName} ${s('ᴇʀᴀ ᴇʟ ɪᴍᴘᴏꜱᴛᴏʀ')}`, style: { color: 0x00FF00, fontWeight: "bold" } },
+                    { type: 'ANNOUNCE_PUBLIC', message: `🏆 ¡${s('ᴠɪᴄᴛᴏʀɪᴀ ᴘᴀʀᴀ ʟᴏꜱ ɪɴᴏᴄᴇɴᴛᴇꜱ')}!`, style: { color: 0x00FF00, fontWeight: "bold" } },
+                    { type: 'ANNOUNCE_PUBLIC', message: BORDER },
+                    { type: 'UPDATE_STATS', payload: { winners: round.normalPlayerIds, losers: round.impostorIds, winnerRole: 'CIVIL' } },
+                    { type: 'SET_PHASE_TIMER', durationSeconds: 7, nextAction: 'RESET_GAME' }
+                ] 
+            };
+        } 
+        
+        const nextClueOrder = round.clueOrder.filter(id => id !== votedOutId);
+        const firstPlayerName = (state.players.get(nextClueOrder[0])?.name || "---").toUpperCase();
+
         return { 
-            state: { ...state, phase: types_1.GamePhase.REVEAL }, 
+            state: { 
+                ...state, 
+                phase: types_1.GamePhase.CLUES, 
+                currentRound: { ...round, impostorIds: remainingImpostors, clueOrder: nextClueOrder, currentClueIndex: 0, clues: new Map(), votes: new Map() } 
+            }, 
             sideEffects: [
-                { type: 'CLEAR_TIMER' },
                 { type: 'MOVE_TO_SPECT', playerId: votedOutId },
-                { type: 'ANNOUNCE_PUBLIC', message: BORDER },
-                { type: 'ANNOUNCE_PUBLIC', message: `🎯 ¡${s('ʟᴏ ᴄᴀᴢᴀʀᴏɴ')}! ${votedName} ${s('ᴇʀᴀ ᴇʟ ɪᴍᴘᴏꜱᴛᴏʀ')}`, style: { color: 0x00FF00, fontWeight: "bold" } },
-                { type: 'ANNOUNCE_PUBLIC', message: `🏆 ¡${s('ᴠɪᴄᴛᴏʀɪᴀ ᴘᴀʀᴀ ʟᴏꜱ ɪɴᴏᴄᴇɴᴛᴇꜱ')}!`, style: { color: 0x00FF00, fontWeight: "bold" } },
-                { type: 'ANNOUNCE_PUBLIC', message: BORDER },
-                { 
-                    type: 'UPDATE_STATS', 
-                    payload: { 
-                        winners: round.normalPlayerIds, 
-                        losers: [round.impostorId], 
-                        winnerRole: 'CIVIL' 
-                    } 
-                },
-                { type: 'SET_PHASE_TIMER', durationSeconds: 7, nextAction: 'RESET_GAME' }
+                { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} ${s('ᴇʀᴀ ɪɴᴏᴄᴇɴᴛᴇ')}.`, style: { color: 0xFF4444, fontWeight: "bold" } },
+                { type: 'ANNOUNCE_PUBLIC', message: `📝 ${s('ɴᴜᴇᴠᴀ ʀᴏɴᴅᴀ ᴅᴇ ᴘɪꜱᴛᴀꜱ')}...`, style: { color: 0xFFFF00, fontWeight: "bold" } },
+                { type: 'ANNOUNCE_PUBLIC', message: `🔔 ${s('ᴛᴜʀɴᴏ ᴅᴇ')}: ${firstPlayerName}`, style: { color: 0x00FFCC, fontWeight: "bold" } },
+                { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
             ] 
         };
     } 
 
     const remainingInnocents = round.normalPlayerIds.filter(id => id !== votedOutId);
-    console.log(`[DEBUG-VOTE] Inocentes restantes tras eliminación: ${remainingInnocents.length}`);
     
-    // VICTORIA IMPOSTOR: Queda solo 1 inocente
-    if (remainingInnocents.length <= 1) {
-        console.log("[DEBUG-VOTE] Camino: Victoria Impostor.");
-        const impName = (state.players.get(round.impostorId)?.name || "Impostor").toUpperCase();
+    if (remainingInnocents.length <= 1 && round.mode !== "TODO_IMPOSTOR") {
+        const impNames = round.impostorIds.map(id => state.players.get(id)?.name.toUpperCase()).join(" Y ");
         return { 
             state: { ...state, phase: types_1.GamePhase.REVEAL }, 
             sideEffects: [
                 { type: 'CLEAR_TIMER' },
                 { type: 'MOVE_TO_SPECT', playerId: votedOutId },
                 { type: 'ANNOUNCE_PUBLIC', message: BORDER },
-                { type: 'ANNOUNCE_PUBLIC', message: `💀 ¡${s('ɢᴀᴍᴇ ᴏᴠᴇʀ')}! ${s('ɢᴀɴᴏ ᴇʟ ɪᴍᴘᴏꜱᴛᴏʀ')} (${impName})`, style: { color: 0xFF0000, fontWeight: "bold" } },
+                { type: 'ANNOUNCE_PUBLIC', message: `💀 ¡${s('ɢᴀᴍᴇ ᴏᴠᴇʀ')}! ${s('ɢᴀɴᴀʀᴏɴ ɪᴍᴘᴏꜱᴛᴏʀᴇꜱ')} (${impNames})`, style: { color: 0xFF0000, fontWeight: "bold" } },
                 { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} ${s('ᴇʀᴀ ɪɴᴏᴄᴇɴᴛᴇ')}.`, style: { color: 0xFFFFFF } },
                 { type: 'ANNOUNCE_PUBLIC', message: BORDER },
-                { 
-                    type: 'UPDATE_STATS', 
-                    payload: { 
-                        winners: [round.impostorId], 
-                        losers: round.normalPlayerIds, 
-                        winnerRole: 'IMPOSTOR' 
-                    } 
-                },
+                { type: 'UPDATE_STATS', payload: { winners: round.impostorIds, losers: round.normalPlayerIds, winnerRole: 'IMPOSTOR' } },
                 { type: 'SET_PHASE_TIMER', durationSeconds: 7, nextAction: 'RESET_GAME' }
             ] 
         };
     }
 
-    console.log("[DEBUG-VOTE] Camino: El juego sigue, nueva ronda de pistas.");
-    const nextClueOrder = round.clueOrder.filter(id => id !== votedOutId);
-    const firstPlayerName = (state.players.get(nextClueOrder[0])?.name || "---").toUpperCase();
+    const nextClueOrderNormal = round.clueOrder.filter(id => id !== votedOutId);
+    const firstPlayerNormal = (state.players.get(nextClueOrderNormal[0])?.name || "---").toUpperCase();
 
     return { 
         state: { 
             ...state, 
             phase: types_1.GamePhase.CLUES, 
-            currentRound: { ...round, normalPlayerIds: remainingInnocents, clueOrder: nextClueOrder, currentClueIndex: 0, clues: new Map(), votes: new Map() } 
+            currentRound: { ...round, normalPlayerIds: remainingInnocents, clueOrder: nextClueOrderNormal, currentClueIndex: 0, clues: new Map(), votes: new Map() } 
         }, 
         sideEffects: [
-            { type: 'CLEAR_TIMER' },
             { type: 'MOVE_TO_SPECT', playerId: votedOutId },
             { type: 'ANNOUNCE_PUBLIC', message: `❌ ${votedName} ${s('ᴇʀᴀ ɪɴᴏᴄᴇɴᴛᴇ')}.`, style: { color: 0xFF4444, fontWeight: "bold" } },
             { type: 'ANNOUNCE_PUBLIC', message: `📝 ${s('ɴᴜᴇᴠᴀ ʀᴏɴᴅᴀ ᴅᴇ ᴘɪꜱᴛᴀꜱ')}...`, style: { color: 0xFFFF00, fontWeight: "bold" } },
-            { type: 'ANNOUNCE_PUBLIC', message: `🔔 ${s('ᴛᴜʀɴᴏ ᴅᴇ')}: ${firstPlayerName}`, style: { color: 0x00FFCC, fontWeight: "bold" } },
+            { type: 'ANNOUNCE_PUBLIC', message: `🔔 ${s('ᴛᴜʀɴᴏ ᴅᴇ')}: ${firstPlayerNormal}`, style: { color: 0x00FFCC, fontWeight: "bold" } },
             { type: 'SET_PHASE_TIMER', durationSeconds: state.settings.clueTimeSeconds }
         ] 
     };
