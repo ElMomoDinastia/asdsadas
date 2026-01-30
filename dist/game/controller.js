@@ -713,15 +713,17 @@ if (msgLower === "!comojugar" || msgLower === "skip") {
     }
 
     if (msgLower === "!palabra") {
-        if (!this.state.currentRound) return false;
-        const isImpostor = this.state.currentRound.impostorId === player.id;
-        const futbolista = this.state.currentRound.footballer;
-        if (isImpostor) {
-            this.adapter.sendAnnouncement(`🕵️ ¡𝐒𝐨𝐬 𝐞𝐥 𝐈𝐌𝐏𝐎𝐒𝐓𝐎𝐑! 𝐌𝐞𝐧𝐭𝐢́ 𝐩𝐚𝐫𝐚 𝐠𝐚𝐧𝐚𝐫.`, player.id, { color: 0xFF0000, fontWeight: 'bold' });
-        } else {
-            this.adapter.sendAnnouncement(`⚽ 𝐭𝐮 𝐣𝐮𝐠𝐚𝐝𝐨𝐫 𝐞𝐬: ${futbolista.toUpperCase()}`, player.id, { color: 0x00FFFF, fontWeight: 'bold' });
-        }
-        return false;
+    if (!this.state.currentRound) return false;
+    
+    const isImpostor = this.state.currentRound.impostorIds.includes(player.id); 
+    const futbolista = this.state.currentRound.footballer;
+
+    if (isImpostor) {
+        this.adapter.sendAnnouncement(`🕵️ ¡𝐒𝐨𝐬 𝐞𝐥 𝐈𝐌𝐏𝐎𝐒𝐓𝐎𝐑! 𝐌𝐞𝐧𝐭𝐢́ 𝐩𝐚𝐫𝐚 𝐠𝐚𝐧𝐚𝐫.`, player.id, { color: 0xFF0000, fontWeight: 'bold' });
+    } else {
+        this.adapter.sendAnnouncement(`⚽ 𝐭𝐮 𝐣𝐮𝐠𝐚𝐝𝐨𝐫 𝐞𝐬: ${futbolista.toUpperCase()}`, player.id, { color: 0x00FFFF, fontWeight: 'bold' });
+    }
+    return false;
     }
 
     if (msgLower === "jugar" || msgLower === "!jugar") {
@@ -820,12 +822,15 @@ applyTransition(result) {
         this.skipVotes.clear();
     }
 
+    // 1. INICIO DE PARTIDA Y GRABACIÓN
     if (prevPhase === types_1.GamePhase.WAITING &&
         this.state.phase === types_1.GamePhase.ASSIGN) {
         this.adapter.startRecording();
         this.gameInProgress = true;
+        
     }
 
+    // 2. REVELACIÓN Y SUBIDA DE REPLAY
     if (
         this.gameInProgress &&
         (
@@ -835,6 +840,16 @@ applyTransition(result) {
         )
     ) {
         this.gameInProgress = false;
+        
+        const round = this.state.currentRound;
+        if (round && this.state.phase === types_1.GamePhase.REVEAL) {
+            const nombresImpostores = round.impostorIds
+                .map(id => this.state.players.get(id)?.name || "Desconocido")
+                .join(" y ");
+            
+            this.adapter.sendAnnouncement(`🔎 LOS IMPOSTORES ERAN: ${nombresImpostores.toUpperCase()}`, null, { color: 0xFF0000, fontWeight: 'bold' });
+        }
+
         setTimeout(() => this.handleReplayUpload(), 2000);
     }
 
@@ -842,6 +857,7 @@ applyTransition(result) {
 
     if (this.state.phase === types_1.GamePhase.ASSIGN && !this.assignDelayTimer) {
         this.setupGameField();
+        
         this.assignDelayTimer = setTimeout(() => {
             this.assignDelayTimer = null;
             this.applyTransition(
@@ -1102,26 +1118,50 @@ async sendDiscordReplay(url, word) {
         body: JSON.stringify(embed)
     }).catch(e => console.error("Error Webhook Log:", e));
   }
-
-  async setupGameField() {
+async setupGameField() {
     if (!this.state.currentRound || !this.state.currentRound.clueOrder) return;
     
     try {
-      const roundPlayerIds = this.state.currentRound.clueOrder; 
+      const round = this.state.currentRound;
+      const roundPlayerIds = round.clueOrder; 
 
       await this.adapter.setTeamsLock(true);
       await this.adapter.stopGame();
       await new Promise(r => setTimeout(r, 100));
 
+      // Mover a todos a Espectadores primero
       const allPlayers = await this.adapter.getPlayerList();
-      for (const p of allPlayers) if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+      for (const p of allPlayers) {
+          if (p.id !== 0) await this.adapter.setPlayerTeam(p.id, 0);
+      }
       
       await new Promise(r => setTimeout(r, 100));
 
+      // Meter a los 5 jugadores al equipo Rojo (o el que uses)
       for (const pid of roundPlayerIds) {
         await this.adapter.setPlayerTeam(pid, 1);
         await new Promise(r => setTimeout(r, 50));
       }
+
+      // 1. INICIAR EL JUEGO (Necesario para teletransportarlos)
+      await this.adapter.startGame();
+      await new Promise(r => setTimeout(r, 200));
+
+      // 2. SENTARLOS Y PONER AVATARES (Doble Impostor Ready)
+      for (let i = 0; i < roundPlayerIds.length; i++) {
+        const pid = roundPlayerIds[i];
+        const pos = SEAT_POSITIONS[i]; // Usa las coordenadas que definiste arriba
+
+        if (pos) {
+            this.adapter.setPlayerPosition(pid, pos.x, pos.y);
+        }
+
+      console.log("[SETUP] Campo configurado con", round.impostorIds.length, "impostores.");
+
+    } catch (e) {
+      console.error("Error en setupGameField:", e);
+    }
+  }
 
       await new Promise(r => setTimeout(r, 300));
       await this.adapter.startGame();
