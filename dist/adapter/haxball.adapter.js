@@ -146,6 +146,12 @@ class HBRoomAdapter {
             return Array.from(data);
         });
     }
+    
+async setTeamColors(team, angle, textColor, colors) {
+        await this.page?.evaluate((t, a, tc, c) => {
+            window.__haxRoom?.setTeamColors(t, a, tc, c);
+        }, team, angle, textColor, colors);
+    }
 
 async kickPlayer(id, reason, ban) {
     await this.page?.evaluate((i, r, b) => window.__haxRoom?.kickPlayer(i, r, b), id, reason, ban);
