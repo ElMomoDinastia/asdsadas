@@ -411,7 +411,7 @@ async handlePlayerChat(player, message) {
 
     if (msgLower === "!discord") {
     const title = "ᴜɴɪᴛᴇ ᴀʟ ᴅɪꜱᴄᴏʀᴅ";
-    const discordLink = "dsc.gg/Impostores";
+    const discordLink = "https://discord.com/invite/PMfBxb5QYC";
 
     this.adapter.sendAnnouncement(
         `┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n  💙 ${s(title)}\n  🔗 ${discordLink}\n┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛`,
