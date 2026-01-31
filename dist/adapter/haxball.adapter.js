@@ -46,21 +46,17 @@ class HBRoomAdapter {
             const isFooter = String(this.config.isFooter) === 'true';
             const isDecorativo = isHeader || isFooter;
 
-let finalName = "";
-const fancyNums = ["0", "1", "2", "3", "4", "5", "6", "7", "8"];
+            let finalName = "";
+            const fancyNums = ["0", "1", "2", "3", "4", "5"]; // Ahora son 6 posiciones
 
-// Lógica para 8 tokens (0 al 7)
-if (roomNumber === 0) { 
-    // TOKEN 0: El Header (Más corto para que no se corte el rayito)
-    finalName = "🕵️🔴──── IMPOSTORES HAXBALL ────🔴🕵️ ";
-} else if (roomNumber === 7) { 
-    // TOKEN 7: El Footer (El último de tus 8 tokens)
-    finalName = "🕵️🔴──── IMPOSTORES HAXBALL ────🔴🕵️ ";
-} else {
-    // TOKENS 1 al 6: Las 6 salas de juego
-    // Usamos roomNumber para que la sala del token 1 diga "01", la del 2 "02", etc.
-    const n = fancyNums[roomNumber];    
-    finalName = `🕵️🔴 Impostor #${n} | ADIVINÁ AL IMPOSTOR`;
+            if (roomNumber === 0) { 
+            finalName = "🕵️🔴──── IMPOSTORES HAXBALL ────🔴🕵️ ";
+            } else if (roomNumber === 5) { 
+            finalName = "🕵️🔴──── IMPOSTORES HAXBALL ────🔴🕵️ ";
+            } else {
+   
+            const n = fancyNums[roomNumber];    
+            finalName = `🕵️🔴 Impostor #${n} | ADIVINÁ AL IMPOSTOR`;
 }
 
             const roomConfig = {
