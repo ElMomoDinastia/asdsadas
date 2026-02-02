@@ -36,15 +36,15 @@ function transition(state, action) {
                 joinedAt: Date.now()
             });
 
-            return { 
-                state: { ...state, players: newPlayers }, 
-                sideEffects: [{ 
-                    type: 'ANNOUNCE_PRIVATE', 
-                    playerId: action.player.id, 
-                    message: `⭐ ${s('ʙɪᴇɴᴠᴇɴɪᴅᴏ')}! ${s('ᴇꜱᴄʀɪʙᴇ')} "jugar" ${s('ᴘᴀʀᴀ ᴇɴᴛʀᴀʀ ᴀ ʟᴀ ꜰɪʟᴀ')}.` 
-                }] 
-            };
-        }
+        return { 
+    state: { ...state, players: newPlayers }, 
+    sideEffects: [{ 
+        type: 'ANNOUNCE_PRIVATE', 
+        playerId: action.player.id, 
+        message: `⭐ ${s('ʙɪᴇɴᴠᴇɴɪᴅᴏ')}! ${s('ᴇꜱᴄʀɪʙᴇ')} "jugar" ${s('ᴘᴀʀᴀ ᴇɴᴛʀᴀʀ ᴀ ʟᴀ ꜰɪʟᴀ')}.\n📖 ${s('ꜱɪ ɴᴏ ꜱᴀʙᴇꜱ ᴄᴏᴍᴏ ᴊᴜɢᴀʀ, ᴜꜱᴀ')} !comojugar` 
+    }] 
+};
+            
 case 'PLAYER_LEAVE': {
             const playersAfterLeave = new Map(state.players);
             playersAfterLeave.delete(action.playerId);
