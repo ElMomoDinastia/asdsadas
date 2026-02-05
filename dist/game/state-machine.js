@@ -56,13 +56,10 @@ case 'PLAYER_LEAVE': {
             if (isGameActive) {
                 const round = state.currentRound;
                 const isImpostor = round.impostorIds.includes(action.playerId);
-                const isSpecialMode = round.mode === "DOBLE_IMPOSTOR" || round.mode === "TODO_IMPOSTOR";
 
-                // 1. SI SE VA UN IMPOSTOR
                 if (isImpostor) {
                     const remainingImpostors = round.impostorIds.filter(id => id !== action.playerId);
 
-                    // A. Si no quedan más impostores: VICTORIA FINAL
                     if (remainingImpostors.length === 0) {
                         const winners = round.clueOrder.filter(id => id !== action.playerId);
                         return {
@@ -85,7 +82,7 @@ case 'PLAYER_LEAVE': {
                             queue: queueAfterLeave, 
                             currentRound: { ...round, impostorIds: remainingImpostors, clueOrder: newClueOrderImp } 
                         },
-                        sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `⚠️ ${s('ᴜɴ ɪɴᴏᴄᴇɴᴛᴇ ᴀʙᴀɴᴅᴏɴᴏ')}...` }] 
+                        sideEffects: [{ type: 'ANNOUNCE_PUBLIC', message: `⚠️ ${s('ᴜɴ ɪᴍᴘᴏꜱᴛᴏʀ ᴀʙᴀɴᴅᴏɴᴏ')}...` }] 
                     };
                 }
 
@@ -111,17 +108,23 @@ case 'PLAYER_LEAVE': {
                         normalPlayerIds: newNormalIds
                     };
 
-
                     if (state.phase === types_1.GamePhase.CLUES) {
                         const currentIndex = round.currentClueIndex;
-                        const wasHisTurn = round.clueOrder[currentIndex] === action.playerId;
-                        const isLastNow = currentIndex >= newClueOrder.length;
-                        const nextIndex = isLastNow ? 0 : currentIndex;
+                        const departedIndex = round.clueOrder.indexOf(action.playerId);
+                        const wasHisTurn = departedIndex === currentIndex;
                         
+                        let nextIndex = currentIndex;
+
+                        if (wasHisTurn) {
+                            nextIndex = currentIndex >= newClueOrder.length ? 0 : currentIndex;
+                        } else if (departedIndex < currentIndex) {
+                            nextIndex = Math.max(0, currentIndex - 1);
+                        }
+
                         newRound.currentClueIndex = nextIndex;
 
                         if (wasHisTurn) {
-                            if (isLastNow) {
+                            if (currentIndex >= newClueOrder.length) {
                                 return {
                                     state: { ...state, players: playersAfterLeave, queue: queueAfterLeave, phase: types_1.GamePhase.DISCUSSION, currentRound: newRound },
                                     sideEffects: [
@@ -166,7 +169,7 @@ case 'PLAYER_LEAVE': {
 
             return { state: { ...state, players: playersAfterLeave, queue: queueAfterLeave }, sideEffects: [] };
         }
-
+            
         case 'JOIN_QUEUE': {
             if (state.queue.includes(action.playerId)) return { state, sideEffects: [] };
             if (state.currentRound?.clueOrder.includes(action.playerId)) {
