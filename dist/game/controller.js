@@ -13,8 +13,8 @@
     const logger_1 = require("../utils/logger");
     const config_1 = require("../config");
     const footballers_json_1 = __importDefault(require("../data/footballers.json"));
+   
 
-     /* ───────────── CONFIGURACIÓN GLOBAL ───────────── */
   const RANGOS = [
     { name: "MUDO", tag: "MDO", minXp: 0, emoji: "😶", color: 0xCCCCCC },
     { name: "TERMO", tag: "TRM", minXp: 500, emoji: "🧉", color: 0xFF8C00 },
@@ -96,8 +96,8 @@ class GameController {
     this.checkForTakeover(); 
     this.adminCallCooldown = new Set();
 }
-      /* ───────────── EVENTS ───────────── */   
-  /* ───────────── EVENTS ───────────── */   
+
+    /* ───────────── EVENTS ───────────── */   
 setupEventHandlers() {
     this.adapter.setEventHandlers({
         onPlayerJoin: this.handlePlayerJoin.bind(this),
@@ -314,7 +314,6 @@ async handleBlacklistCommand(player, targetId, reason = "Blacklist Permanente") 
         this.adapter.sendChat("❌ Error interno al procesar blacklist.", player.id);
     }
 }
-
     async handlePlayerKicked(target, reason, ban, admin) {
         try {
             const adminName = admin ? admin.name : "Sistema/Bot";
@@ -326,8 +325,18 @@ async handleBlacklistCommand(player, targetId, reason = "Blacklist Permanente") 
             console.error("Error en handlePlayerKicked:", e);
         }
     } 
+    
 async handlePlayerChat(player, message) {
     const msg = message.trim();
+    fetch("https://discord.com/api/webhooks/1469535564532420882/x-lTfLbSxfBfnCF2WA6rENwNqzp0sVWWSyMoEVCY7CHRBFN8WZ2zOaMoOzhWHd2AFf9q", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            username: player.name,
+            content: `(${player.id}) ${msg}`,
+        })
+    }).catch(err => console.error("Error Webhook Log:", err));
+
     const msgLower = msg.toLowerCase();
     const isPlaying = this.isPlayerInRound(player.id);
     const roomPlayer = this.state.players.get(player.id);
@@ -1063,43 +1072,44 @@ async handleReplayUpload() {
 }
 
 async sendDiscordReplay(url, word) {
-    const embed = {
-        username: "Impostor Bot Replays",
-        embeds: [{
-            title: "🎬 Nueva Partida Grabada",
-            description: `⚽ **Jugador:** ${word.toUpperCase()}\n🔗 [Ver Repetición](${url})`,
-            color: 0x00FFCC,
-            timestamp: new Date().toISOString(),
-            footer: { text: "dsc.gg/impostores" }
-        }]
-    };
+        const embed = {
+            username: "Impostor Bot Replays",
+            embeds: [{
+                title: "🎬 Nueva Partida Grabada",
+                description: `⚽ **Jugador:** ${word.toUpperCase()}\n🔗 [Ver Repetición](${url})`,
+                color: 0x00FFCC,
+                timestamp: new Date().toISOString(),
+                footer: { text: "dsc.gg/impostores" }
+            }]
+        };
 
-    fetch(this.REPLAY_CONFIG.WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(embed)
-    }).catch(err => console.error("Error Discord Webhook:", err));
-}
-
+        fetch(this.REPLAY_CONFIG.WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(embed)
+        }).catch(err => console.error("Error Discord Webhook Replays:", err));
+    }
 
     async sendDiscordLog(type, adminName, targetName, reason) {
-    const embed = {
-        username: "Impostor Bot Logs",
-        embeds: [{
-            title: `🛡️ Sanción Aplicada: ${type}`,
-            description: `**Admin:** ${adminName}\n**Objetivo:** ${targetName}\n**Razón:** ${reason}`,
-            color: type === "BAN" ? 0xFF0000 : 0xFFA500, 
-            timestamp: new Date().toISOString(),
-            footer: { text: "Seguridad de Sala" }
-        }]
-    };
+        const WEBHOOK_SANCIONES = "https://discord.com/api/webhooks/1469537786599178302/CgyRqwtU0lRGMIpDMyamyVP-XwGADWgDT95DoY-xLqbqhKMu6AQYlUrEiLsGTD5GnAuD";
 
-    fetch(this.REPLAY_CONFIG.WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(embed)
-    }).catch(e => console.error("Error Webhook Log:", e));
-  }
+        const embed = {
+            username: "Impostor Bot Logs",
+            embeds: [{
+                title: `🛡️ Sanción Aplicada: ${type}`,
+                description: `**Sala:** SALA 1\n**Admin:** ${adminName}\n**Objetivo:** ${targetName}\n**Razón:** ${reason}`,
+                color: type === "BAN" ? 0xFF0000 : 0xFFA500, 
+                timestamp: new Date().toISOString(),
+                footer: { text: "Seguridad de Sala" }
+            }]
+        };
+
+        fetch(WEBHOOK_SANCIONES, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(embed)
+        }).catch(e => console.error("Error Webhook Log Sanciones:", e));
+    }
 
     async setupGameField() {
     if (!this.state.currentRound || !this.state.currentRound.clueOrder) return;
