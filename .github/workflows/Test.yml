@@ -5,29 +5,36 @@ on:
     branches: [ main ]
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *' 
+    - cron: '0 */6 * * *'
 
 jobs:
   deploy-room:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
+
     strategy:
-      fail-fast: false 
+      fail-fast: false
       matrix:
-        room_id: [0, 1, 2, 3, 4, 5]
+        room_id: [0,1,2,3,4,5]
 
     steps:
       - name: Checkout del código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configurar Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 18
+          cache: "npm"
+
+      - name: Cache Puppeteer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}
 
       - name: Instalar dependencias
-        run: |
-          npm install --no-audit --no-fund
-          npx puppeteer install
+        run: npm ci --no-audit --no-fund
 
       - name: Ejecutar y Relevar
         env:
@@ -44,4 +51,5 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/Test.yml/dispatches" \
               -d '{"ref":"main"}') &
           fi
+
           timeout 21300s npm start || echo "Ciclo completado para Sala ${{ matrix.room_id }}"
